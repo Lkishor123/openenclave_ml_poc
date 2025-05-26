@@ -1,6 +1,8 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 744350d..b6a7d97 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -15,25 +15,30 @@
+@@ -27,25 +27,35 @@ message(STATUS "  OE Include Dirs: ${openenclave_INCLUDE_DIRS}")
  
  # --- Find ONNX Runtime ---
  # Option for user to specify ONNX Runtime root directory
@@ -16,6 +18,7 @@
  set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT_DIR}/include")
  set(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_ROOT_DIR}/lib")
  
++ 
 +# Validate the provided or default ONNXRUNTIME_ROOT_DIR
 +if(NOT EXISTS "${ONNXRUNTIME_ROOT_DIR}")
 +    message(FATAL_ERROR "ONNXRUNTIME_ROOT_DIR '${ONNXRUNTIME_ROOT_DIR}' does not exist. Please ensure ONNX Runtime is installed there or provide a correct path via -DONNXRUNTIME_ROOT_DIR.")
@@ -42,3 +45,4 @@
 -message(STATUS "Using ONNXRUNTIME_ROOT_DIR: ${ONNXRUNTIME_ROOT_DIR}")
  message(STATUS "  ONNX Runtime Include Dir: ${ONNXRUNTIME_INCLUDE_DIR}")
  message(STATUS "  ONNX Runtime Library: ${ONNXRUNTIME_LIBRARY}")
+ 
