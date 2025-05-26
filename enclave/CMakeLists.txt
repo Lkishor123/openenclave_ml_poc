@@ -12,7 +12,7 @@ set(ENCLAVE_HEADERS
 
 # Add enclave using Open Enclave's CMake function
 # This function handles compilation, linking, and signing for the enclave.
-oe_add_enclave(${ENCLAVE_NAME}
+add_enclave(${ENCLAVE_NAME}
     SOURCES ${ENCLAVE_SOURCES}
     HEADERS ${ENCLAVE_HEADERS}
     # USER_INCLUDES are handled by include_directories(${EDL_GENERATED_DIR}) in root CMakeLists.txt
