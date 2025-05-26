@@ -1,5 +1,5 @@
---- a/CMakeLists.txt (Root, v2)
-+++ b/CMakeLists.txt (Root, v2)
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
 @@ -15,25 +15,30 @@
  
  # --- Find ONNX Runtime ---
