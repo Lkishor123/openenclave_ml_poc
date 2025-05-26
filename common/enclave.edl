@@ -1,0 +1,70 @@
+/* common/enclave.edl */
+enclave {
+    // Import SGX specific macros and definitions from Open Enclave SDK
+    from "openenclave/edl/sgx/sgxmacros.edl" import *;
+
+    // Trusted functions (ECALLs) - callable from the host, executed inside the enclave
+    trusted {
+        /*
+         * Initializes the ML model resources within the enclave.
+         * This function should be called once before any inference calls.
+         *
+         * @param model_data Pointer to the ONNX model byte array.
+         * @param model_size Size of the model_data in bytes.
+         * @return oe_result_t OE_OK on success, or an appropriate error code.
+         */
+        public oe_result_t initialize_enclave_ml(
+            [in, size=model_size] const unsigned char* model_data,
+            size_t model_size
+        );
+
+        /*
+         * Performs inference using the loaded ML model.
+         *
+         * @param input_data Pointer to the input tensor data (e.g., float array).
+         * @param input_data_size Size of the input_data buffer in bytes.
+         * @param output_buffer Pointer to the buffer where output tensor data will be written by the enclave.
+         * @param output_buffer_size Size of the allocated output_buffer in bytes.
+         * @param actual_output_size Pointer to a size_t variable where the enclave will write
+         * the actual number of bytes written to output_buffer.
+         * @return oe_result_t OE_OK on success, OE_BUFFER_TOO_SMALL if output_buffer is insufficient,
+         * or another error code.
+         */
+        public oe_result_t enclave_infer(
+            [in, size=input_data_size] const float* input_data,
+            size_t input_data_size,
+            [out, size=output_buffer_size] float* output_buffer,
+            size_t output_buffer_size,
+            [out] size_t* actual_output_size
+        );
+
+        /*
+         * Terminates ML resources and cleans up allocated memory within the enclave.
+         * This function should be called when the enclave is about to be terminated.
+         *
+         * @return oe_result_t OE_OK on success, or an error code if cleanup fails.
+         */
+        public oe_result_t terminate_enclave_ml();
+    };
+
+    // Untrusted functions (OCALLs) - callable from the enclave, executed in the host
+    // For production, OCALLs should be minimized and carefully designed to avoid leaking
+    // sensitive information or introducing vulnerabilities.
+    untrusted {
+        /*
+         * Example OCALL for logging a message from the enclave.
+         * In a production system, this should be designed carefully for security.
+         * For instance, messages might be batched or have strict formatting.
+         *
+         * @param message The string message to log.
+         */
+        // void ocall_print_string([in, string] const char* message);
+
+        /*
+         * Example OCALL for getting high-resolution time from host.
+         * Note: Relying on host for time can be problematic for some security-sensitive operations.
+         * Enclave has oe_get_time but it might not be monotonic or high-resolution enough for all perf measures.
+         */
+        // oe_result_t ocall_get_monotonic_time([out] uint64_t* time_ns);
+    };
+};
