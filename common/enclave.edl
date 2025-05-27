@@ -1,52 +1,48 @@
 // openenclave_ml_poc/common/enclave.edl
 enclave {
     // Import necessary system OCalls for the SGX platform.
-    // This includes OCalls like oe_sgx_get_cpuid_table_ocall.
-    from "openenclave/edl/syscall.edl" import *;
     from "openenclave/edl/sgx/platform.edl" import *;
-    // Import logging if your enclave uses OE logging features that make OCALLs
-    from "openenclave/edl/logging.edl" import *;
-
-    // Import memory if your enclave uses oe_malloc_ocall/oe_free_ocall directly
-    // (usually not needed if using enclave's internal heap/allocators)
-    from "openenclave/edl/memory.edl" import *;
+    from "openenclave/edl/logging.edl" import *; // For oe_log_ocall if used by enclave logging
 
     trusted {
-        // ECALL to initialize the ML model inside the enclave
-        public oe_result_t initialize_enclave_ml(
-            [in, size=model_size] const unsigned char* model_data,
-            size_t model_size);
+        // ECALL to initialize the ML "context" in the enclave.
+        // The enclave will then OCALL the host to load the actual model.
+        public oe_result_t initialize_enclave_ml_context(
+            [in, size=model_size] const unsigned char* model_data, // Model data passed to enclave
+            size_t model_size,
+            [out] uint64_t* enclave_session_handle); // Enclave returns its own handle/ID for this session
 
-        // ECALL to perform inference using the loaded model
+        // ECALL to perform inference.
         public oe_result_t enclave_infer(
-            [in, size=input_data_byte_size] const float* input_data, // Assuming float input for ONNX
+            uint64_t enclave_session_handle, // Handle from initialize_enclave_ml_context
+            [in, size=input_data_byte_size] const float* input_data,
             size_t input_data_byte_size,
-            [out, size=output_buffer_size_bytes] float* output_buffer, // Assuming float output
+            [out, size=output_buffer_size_bytes] float* output_buffer,
             size_t output_buffer_size_bytes,
-            [out] size_t* actual_output_size_bytes); // To report actual size of output written
+            [out] size_t* actual_output_size_bytes);
 
-        // ECALL to terminate/cleanup ML resources in the enclave
-        public oe_result_t terminate_enclave_ml();
+        // ECALL to terminate/cleanup ML resources associated with the handle.
+        public oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle);
     };
 
     untrusted {
-        // Define any OCALLs your enclave needs to make to the host.
-        // For example, if the host needs to perform complex ONNX operations
-        // that are not feasible or secure to do entirely within the enclave's TCB.
-        //
-        // Example OCALL (if enclave delegates ONNX session creation to host):
-        // oe_result_t ocall_host_onnx_create_session(
-        //     [out] uint64_t* session_handle,
-        //     [in, size=model_data_len] const unsigned char* model_data,
-        //     size_t model_data_len);
-        //
-        // Example OCALL (if enclave delegates inference to host):
-        // oe_result_t ocall_host_onnx_run_inference(
-        //     uint64_t session_handle,
-        //     [in, size=input_len] const void* input_data,
-        //     size_t input_len,
-        //     [out, size=output_buf_len] void* output_data,
-        //     size_t output_buf_len,
-        //     [out] size_t* actual_output_len);
+        // OCALL for the enclave to request the host to load an ONNX model.
+        // The host will manage the OrtSession and return an opaque handle to it.
+        oe_result_t ocall_onnx_load_model(
+            [out] uint64_t* host_session_handle,
+            [in, size=model_data_len] const unsigned char* model_data,
+            size_t model_data_len);
+
+        // OCALL for the enclave to request the host to run inference.
+        oe_result_t ocall_onnx_run_inference(
+            uint64_t host_session_handle, // Handle provided by host from ocall_onnx_load_model
+            [in, size=input_len] const void* input_data, // Enclave provides input tensor data
+            size_t input_len,
+            [out, size=output_buf_len] void* output_data, // Enclave provides buffer for output
+            size_t output_buf_len,
+            [out] size_t* actual_output_len); // Host writes actual output size
+
+        // OCALL for the enclave to request the host to release an ONNX session.
+        oe_result_t ocall_onnx_release_session(uint64_t host_session_handle);
     };
 };
