@@ -6,6 +6,23 @@ set(CMAKE_CXX_STANDARD 11) # Or 14/17 if needed, though C is primary here
 
 # Find Open Enclave SDK
 # This relies on sourcing openenclaverc or having OE_SDK_PATH set.
+# --- BEGIN DIAGNOSTIC ---
+message(STATUS "Attempting to find oeedger8r with find_program...")
+find_program(OEEDGER8R_DIRECT_PATH oeedger8r
+             HINTS /opt/openenclave/bin $ENV{OE_SDK_PATH}/bin $ENV{OE_SDK_PATH}/tools
+             PATHS $ENV{PATH} /usr/bin /usr/local/bin)
+if(OEEDGER8R_DIRECT_PATH)
+    message(STATUS "  Direct find_program found oeedger8r at: ${OEEDGER8R_DIRECT_PATH}")
+else()
+    message(WARNING "  Direct find_program COULD NOT find oeedger8r.")
+    message(STATUS "    Current CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+    message(STATUS "    Current ENV{PATH}: $ENV{PATH}")
+    message(STATUS "    Current ENV{OE_SDK_PATH}: $ENV{OE_SDK_PATH}")
+endif()
+# --- END DIAGNOSTIC ---
+
+find_package(openenclave REQUIRED) # Existing line
+# ... rest of your CMakeLists.txt
 find_package(openenclave REQUIRED)
 message(STATUS "Found OpenEnclave SDK version: ${openenclave_VERSION}")
 message(STATUS "  OE Edger8r: ${openenclave_EDGER8R}")
