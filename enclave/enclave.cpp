@@ -7,6 +7,8 @@
 
 // Open Enclave API
 #include <openenclave/enclave.h>
+#include <openenclave/result.h> // For oe_result_str and common OE_ Suffix error codes
+#include <openenclave/error.h>  // For specific error codes like OE_ERROR_INVALID_STATE
 
 // ONNX Runtime C API header
 // This must be available in the include path during enclave compilation.
@@ -109,7 +111,8 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
     }
 
     OrtStatus* status = nullptr;
-    oe_result_t result = OE_FAILURE;
+    oe_result_t result = OE_FAILURE; // Default to failure
+    OrtSessionOptions* session_options = nullptr; // Declare here to ensure it's in scope for cleanup
 
     // Cleanup any previous resources, just in case of re-initialization (though not typical)
     cleanup_onnx_resources_internal(ort_api);
@@ -130,10 +133,9 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
     }
 
     // 3. Create Session Options (optional, but good practice)
-    OrtSessionOptions* session_options;
-    status = ort_api->CreateSessionOptions(&session_options);
+    status = ort_api->CreateSessionOptions(&session_options); // Assign to the one declared above
     result = check_and_map_ort_status(ort_api, status, "CreateSessionOptions");
-    if (result != OE_OK) goto cleanup;
+    if (result != OE_OK) goto cleanup; // session_options will be released in cleanup
 
     // Example: Set number of threads (may not be effective or advisable in SGX depending on OE version/threading model)
     // ort_api->SetIntraOpNumThreads(session_options, 1);
@@ -144,7 +146,11 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
     status = ort_api->CreateSessionFromArray(g_ort_env, model_data, model_size, session_options, &g_ort_session);
     result = check_and_map_ort_status(ort_api, status, "CreateSessionFromArray");
     // Release session options whether session creation succeeded or failed
-    if (session_options) ort_api->ReleaseSessionOptions(session_options);
+    // It's safe to release session_options now as it's not needed further by the session itself.
+    if (session_options) {
+        ort_api->ReleaseSessionOptions(session_options);
+        session_options = nullptr; // Avoid double release in cleanup
+    }
     if (result != OE_OK) goto cleanup;
 
 
@@ -162,37 +168,39 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
     // For this example, we'll focus on the first input node.
     // A production system should iterate and handle all required inputs.
     if (num_input_nodes > 0) {
-        char* input_name_alloc;
+        char* input_name_alloc = nullptr; // Declare here
+        OrtTypeInfo* typeinfo_input = nullptr; // Declare here
+        const OrtTensorTypeAndShapeInfo* tensor_info_input = nullptr; // Declare here
+
         status = ort_api->SessionGetInputName(g_ort_session, 0, g_ort_allocator, &input_name_alloc);
         result = check_and_map_ort_status(ort_api, status, "SessionGetInputName (0)");
         if (result != OE_OK) goto cleanup;
         g_input_node_names_alloc.push_back(input_name_alloc); // Manages allocated memory
         g_input_node_names_ptr.push_back(g_input_node_names_alloc.back());
 
-        OrtTypeInfo* typeinfo_input;
         status = ort_api->SessionGetInputTypeInfo(g_ort_session, 0, &typeinfo_input);
         result = check_and_map_ort_status(ort_api, status, "SessionGetInputTypeInfo (0)");
         if (result != OE_OK) goto cleanup;
 
-        const OrtTensorTypeAndShapeInfo* tensor_info_input;
         status = ort_api->CastTypeInfoToTensorInfo(typeinfo_input, &tensor_info_input);
         result = check_and_map_ort_status(ort_api, status, "CastTypeInfoToTensorInfo (Input 0)");
-        if (result != OE_OK) { ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
+        if (result != OE_OK) { if(typeinfo_input) ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
 
         status = ort_api->GetTensorElementType(tensor_info_input, &g_expected_input_type);
         result = check_and_map_ort_status(ort_api, status, "GetTensorElementType (Input 0)");
-        if (result != OE_OK) { ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
+        if (result != OE_OK) { if(typeinfo_input) ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
 
         size_t num_dims_input;
         status = ort_api->GetDimensionsCount(tensor_info_input, &num_dims_input);
         result = check_and_map_ort_status(ort_api, status, "GetDimensionsCount (Input 0)");
-        if (result != OE_OK) { ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
+        if (result != OE_OK) { if(typeinfo_input) ort_api->ReleaseTypeInfo(typeinfo_input); goto cleanup; }
 
         g_expected_input_dims.resize(num_dims_input);
         status = ort_api->GetDimensions(tensor_info_input, g_expected_input_dims.data(), num_dims_input);
         result = check_and_map_ort_status(ort_api, status, "GetDimensions (Input 0)");
+        
         // Release typeinfo for input
-        ort_api->ReleaseTypeInfo(typeinfo_input);
+        if(typeinfo_input) ort_api->ReleaseTypeInfo(typeinfo_input);
         if (result != OE_OK) goto cleanup;
 
         ENCLAVE_LOG("INFO", "Model Input 0: Name=%s, Type=%d, Dims=%zu", g_input_node_names_ptr[0], g_expected_input_type, num_dims_input);
@@ -212,7 +220,7 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
     }
     // For this example, we'll focus on the first output node.
     if (num_output_nodes > 0) {
-        char* output_name_alloc;
+        char* output_name_alloc = nullptr; // Declare here
         status = ort_api->SessionGetOutputName(g_ort_session, 0, g_ort_allocator, &output_name_alloc);
         result = check_and_map_ort_status(ort_api, status, "SessionGetOutputName (0)");
         if (result != OE_OK) goto cleanup;
@@ -226,6 +234,9 @@ oe_result_t initialize_enclave_ml(const unsigned char* model_data, size_t model_
 
 cleanup:
     ENCLAVE_LOG("ERROR", "Failed to initialize ONNX model. Cleaning up resources.");
+    if (session_options && ort_api) { // Ensure session_options is released if not already
+        ort_api->ReleaseSessionOptions(session_options);
+    }
     cleanup_onnx_resources_internal(ort_api); // Clean up partially initialized resources
     return result; // Return the specific error code
 }
@@ -238,9 +249,25 @@ oe_result_t enclave_infer(
     size_t output_buffer_size_bytes,
     size_t* actual_output_size_bytes) {
 
+    // --- Declare all variables needed before any potential goto infer_cleanup ---
+    const OrtApi* ort_api = nullptr;
+    oe_result_t result = OE_FAILURE; // Default to failure
+    OrtStatus* status = nullptr;
+    OrtValue* input_tensor = nullptr;
+    OrtValue* output_tensor = nullptr;
+    OrtMemoryInfo* memory_info = nullptr;
+    OrtTensorTypeAndShapeInfo* output_tensor_info = nullptr;
+    // Variables for output processing, declare them here so goto doesn't bypass them
+    ONNXTensorElementDataType output_type = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+    size_t output_element_count = 0;
+    size_t required_output_buf_size_bytes = 0;
+    float* inferred_output_data_ptr = nullptr;
+    // --- End of variable declarations for infer_cleanup scope ---
+
+
     if (!g_ort_session) {
         ENCLAVE_LOG("ERROR", "ONNX session not initialized. Call initialize_enclave_ml first.");
-        return OE_ERROR_INVALID_STATE; // Or OE_NOT_INITIALIZED
+        return OE_ERROR_INVALID_STATE; // OE_ERROR_INVALID_STATE is defined in openenclave/error.h
     }
     if (!input_data || input_data_size_bytes == 0 ||
         !output_buffer || output_buffer_size_bytes == 0 ||
@@ -258,16 +285,12 @@ oe_result_t enclave_infer(
     }
 
 
-    const OrtApi* ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+    ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     if (!ort_api) {
         ENCLAVE_LOG("ERROR", "Failed to get ONNX Runtime API for inference.");
+        // No goto here, as infer_cleanup expects ort_api to be potentially valid for releases
         return OE_FAILURE;
     }
-
-    oe_result_t result = OE_FAILURE;
-    OrtStatus* status = nullptr;
-    OrtValue* input_tensor = nullptr;
-    OrtValue* output_tensor = nullptr; // Assuming a single output tensor for this PoC
 
     // 1. Prepare Input Tensor
     //    Validate input data size against model's expected dimensions.
@@ -276,133 +299,141 @@ oe_result_t enclave_infer(
     bool dynamic_dim_resolved = false;
 
     for (size_t i = 0; i < current_input_dims.size(); ++i) {
-        if (current_input_dims[i] == -1 || current_input_dims[i] == 0) { // Dynamic dimension (e.g., batch size or sequence length)
-            // For this PoC, if it's the first dimension (batch size), we'll try to infer it.
-            // A robust solution needs a clear contract on how dynamic dims are handled.
+        if (current_input_dims[i] == -1 || current_input_dims[i] == 0) { // Dynamic dimension
             if (i == 0 && !dynamic_dim_resolved) { // Assume it's batch size
-                // Calculate batch size based on total elements if other dims are fixed
                 size_t fixed_elements_per_batch = 1;
+                bool multiple_dynamic_dims = false;
                 for(size_t j = 1; j < current_input_dims.size(); ++j) {
                     if (current_input_dims[j] <= 0) {
-                         ENCLAVE_LOG("ERROR", "Model has multiple dynamic input dimensions or non-positive static dim, not supported by this PoC logic.");
-                         return OE_INVALID_PARAMETER;
+                         multiple_dynamic_dims = true; break;
                     }
                     fixed_elements_per_batch *= current_input_dims[j];
                 }
-                if (fixed_elements_per_batch == 0 || (input_data_size_bytes / sizeof(float)) % fixed_elements_per_batch != 0) {
+                if (multiple_dynamic_dims || fixed_elements_per_batch == 0) {
+                    ENCLAVE_LOG("ERROR", "Model has multiple dynamic input dimensions or non-positive static dim, not supported by this PoC logic.");
+                    result = OE_INVALID_PARAMETER; goto infer_cleanup;
+                }
+                if ((input_data_size_bytes / sizeof(float)) % fixed_elements_per_batch != 0) {
                     ENCLAVE_LOG("ERROR", "Cannot infer dynamic batch size from input data size and model's other fixed dimensions.");
-                    return OE_INVALID_PARAMETER;
+                    result = OE_INVALID_PARAMETER; goto infer_cleanup;
                 }
                 current_input_dims[i] = (input_data_size_bytes / sizeof(float)) / fixed_elements_per_batch;
                 dynamic_dim_resolved = true;
-                ENCLAVE_LOG("INFO", "Inferred dynamic batch size to be: %lld", current_input_dims[i]);
+                ENCLAVE_LOG("INFO", "Inferred dynamic batch size to be: %ld", (long)current_input_dims[i]); // Corrected format specifier
             } else {
                 ENCLAVE_LOG("ERROR", "Model has unhandled dynamic input dimension at index %zu or already resolved one.", i);
-                return OE_INVALID_PARAMETER;
+                result = OE_INVALID_PARAMETER; goto infer_cleanup;
             }
         }
-        expected_num_input_elements *= current_input_dims[i];
+        if (current_input_dims[i] > 0) { // Check to prevent multiplication by zero if a dim is still unresolved/invalid
+             expected_num_input_elements *= current_input_dims[i];
+        } else {
+            ENCLAVE_LOG("ERROR", "Invalid dimension resolved for input tensor.");
+            result = OE_INVALID_PARAMETER; goto infer_cleanup;
+        }
     }
+
 
     if (input_data_size_bytes != expected_num_input_elements * sizeof(float)) {
         ENCLAVE_LOG("ERROR", "Input data size (%zu bytes) does not match model's expected input size (%zu elements * %zu bytes/el = %zu bytes) for resolved shape.",
                input_data_size_bytes, expected_num_input_elements, sizeof(float), expected_num_input_elements * sizeof(float));
-        return OE_INVALID_PARAMETER;
+        result = OE_INVALID_PARAMETER; goto infer_cleanup;
     }
 
-    OrtMemoryInfo* memory_info;
-    status = ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info); // ONNX expects CPU memory for this tensor
+    status = ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info);
     result = check_and_map_ort_status(ort_api, status, "CreateCpuMemoryInfo");
     if (result != OE_OK) goto infer_cleanup;
 
-    // Create tensor from user's buffer. Data is not copied here.
-    // Ensure input_data lifetime is valid throughout ort_api->Run().
     status = ort_api->CreateTensorWithDataAsOrtValue(
         memory_info,
-        const_cast<float*>(input_data), // ONNX API needs non-const, but we treat it as const
+        const_cast<float*>(input_data),
         input_data_size_bytes,
         current_input_dims.data(), current_input_dims.size(),
-        g_expected_input_type, // Should be ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT
+        g_expected_input_type,
         &input_tensor);
-    // Release memory_info once tensor is created or if creation fails
-    if(memory_info) ort_api->ReleaseMemoryInfo(memory_info);
+    // memory_info is consumed by CreateTensorWithDataAsOrtValue or needs release on failure before this point.
+    // It's safer to release it immediately after its use.
+    if(memory_info) {
+        ort_api->ReleaseMemoryInfo(memory_info);
+        memory_info = nullptr; // Avoid double release
+    }
     result = check_and_map_ort_status(ort_api, status, "CreateTensorWithDataAsOrtValue");
     if (result != OE_OK) goto infer_cleanup;
 
 
     // 2. Perform Inference
-    //    Run the model with the input tensor and get the output tensor.
-    //    This PoC assumes a single output.
-    status = ort_api->Run(g_ort_session, nullptr, // RunOptions (can be null)
+    status = ort_api->Run(g_ort_session, nullptr,
                           g_input_node_names_ptr.data(), &input_tensor, g_input_node_names_ptr.size(),
                           g_output_node_names_ptr.data(), g_output_node_names_ptr.size(), &output_tensor);
     result = check_and_map_ort_status(ort_api, status, "Run (Inference)");
-    // Input tensor can be released after Run() call
-    if (input_tensor) { ort_api->ReleaseValue(input_tensor); input_tensor = nullptr; }
+    if (input_tensor) { ort_api->ReleaseValue(input_tensor); input_tensor = nullptr; } // Release input tensor after Run
     if (result != OE_OK) goto infer_cleanup;
 
     if (!output_tensor) {
         ENCLAVE_LOG("ERROR", "Inference run completed but no output tensor was produced.");
-        result = OE_UNEXPECTED; // Or OE_NOT_FOUND
+        result = OE_UNEXPECTED;
         goto infer_cleanup;
     }
 
     // 3. Process Output Tensor
-    OrtTensorTypeAndShapeInfo* output_tensor_info;
     status = ort_api->GetTensorTypeAndShape(output_tensor, &output_tensor_info);
     result = check_and_map_ort_status(ort_api, status, "GetTensorTypeAndShape (Output)");
     if (result != OE_OK) goto infer_cleanup;
 
-    ONNXTensorElementDataType output_type;
     status = ort_api->GetTensorElementType(output_tensor_info, &output_type);
     result = check_and_map_ort_status(ort_api, status, "GetTensorElementType (Output)");
-    if (result != OE_OK) { ort_api->ReleaseTensorTypeAndShapeInfo(output_tensor_info); goto infer_cleanup; }
+    if (result != OE_OK) goto infer_cleanup; // output_tensor_info will be released in cleanup
 
     if (output_type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
         ENCLAVE_LOG("ERROR", "This enclave_infer currently only supports FLOAT outputs. Model produced type %d.", output_type);
-        ort_api->ReleaseTensorTypeAndShapeInfo(output_tensor_info);
-        result = OE_INVALID_PARAMETER; // Or OE_UNSUPPORTED
-        goto infer_cleanup;
+        result = OE_INVALID_PARAMETER;
+        goto infer_cleanup; // output_tensor_info will be released in cleanup
     }
 
-    size_t output_element_count;
     status = ort_api->GetTensorShapeElementCount(output_tensor_info, &output_element_count);
-    // Release output_tensor_info
-    ort_api->ReleaseTensorTypeAndShapeInfo(output_tensor_info);
     result = check_and_map_ort_status(ort_api, status, "GetTensorShapeElementCount (Output)");
+    // Release output_tensor_info now that we are done with it for this path
+    if (output_tensor_info) {
+        ort_api->ReleaseTensorTypeAndShapeInfo(output_tensor_info);
+        output_tensor_info = nullptr;
+    }
     if (result != OE_OK) goto infer_cleanup;
 
 
-    size_t required_output_buf_size_bytes = output_element_count * sizeof(float);
-    *actual_output_size_bytes = required_output_buf_size_bytes; // Report actual size needed/produced
+    required_output_buf_size_bytes = output_element_count * sizeof(float);
+    *actual_output_size_bytes = required_output_buf_size_bytes;
 
     if (required_output_buf_size_bytes > output_buffer_size_bytes) {
         ENCLAVE_LOG("WARN", "Output buffer too small. Needed: %zu bytes, Provided: %zu bytes.",
                required_output_buf_size_bytes, output_buffer_size_bytes);
         result = OE_BUFFER_TOO_SMALL;
-        goto infer_cleanup; // Still report actual_output_size_bytes
+        goto infer_cleanup;
     }
 
-    // Get pointer to output data within the OrtValue
-    float* inferred_output_data_ptr;
     status = ort_api->GetTensorMutableData(output_tensor, (void**)&inferred_output_data_ptr);
     result = check_and_map_ort_status(ort_api, status, "GetTensorMutableData (Output)");
     if (result != OE_OK) goto infer_cleanup;
 
-    // Copy data to user's output_buffer
-    // It's crucial that output_buffer is a valid pointer to enclave memory here.
-    // The EDL marshaller handles copying this buffer back to the host.
     memcpy(output_buffer, inferred_output_data_ptr, required_output_buf_size_bytes);
 
     ENCLAVE_LOG("INFO", "Inference successful. Output size: %zu bytes.", required_output_buf_size_bytes);
-    result = OE_OK;
+    result = OE_OK; // Success!
 
 infer_cleanup:
-    if (input_tensor && ort_api) { // Should have been released after Run, but as a safeguard
-        ort_api->ReleaseValue(input_tensor);
-    }
-    if (output_tensor && ort_api) {
-        ort_api->ReleaseValue(output_tensor);
+    // Release resources in reverse order of acquisition, or if they exist
+    if (ort_api) { // Only call OrtAPI functions if ort_api is valid
+        if (input_tensor) {
+            ort_api->ReleaseValue(input_tensor);
+        }
+        if (output_tensor) {
+            ort_api->ReleaseValue(output_tensor);
+        }
+        if (output_tensor_info) { // If not released above due to early exit
+            ort_api->ReleaseTensorTypeAndShapeInfo(output_tensor_info);
+        }
+        if (memory_info) { // If not released above due to early exit
+             ort_api->ReleaseMemoryInfo(memory_info);
+        }
     }
     return result;
 }
@@ -411,8 +442,6 @@ infer_cleanup:
 oe_result_t terminate_enclave_ml() {
     ENCLAVE_LOG("INFO", "Terminating ML resources...");
     const OrtApi* ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    // ort_api might be null if initialization failed very early,
-    // cleanup_onnx_resources_internal handles null ort_api.
     cleanup_onnx_resources_internal(ort_api);
     ENCLAVE_LOG("INFO", "ONNX resources terminated.");
     return OE_OK;
