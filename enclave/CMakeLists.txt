@@ -22,14 +22,34 @@ target_link_libraries(${ENCLAVE_NAME} PRIVATE
     # though oeenclave should ideally pull it in.
 )
 
-# Include ONNX Runtime headers for the enclave (if enclave uses ONNX C API directly)
-# GLOBAL_ONNXRUNTIME_INCLUDE_DIR is set in the root CMakeLists.txt
+# Add Include Directories:
+# 1. Open Enclave SDK include directories.
+#    The OpenEnclave_INCLUDE_DIRS variable should be set by find_package(OpenEnclave CONFIG REQUIRED)
+#    in the root CMakeLists.txt. Linking against openenclave::oeenclave should also
+#    propagate include directories, but explicitly adding them can resolve issues.
+if(OpenEnclave_INCLUDE_DIRS)
+    target_include_directories(${ENCLAVE_NAME} PRIVATE ${OpenEnclave_INCLUDE_DIRS})
+    message(STATUS "Enclave (${ENCLAVE_NAME}): Added OpenEnclave SDK include directories: ${OpenEnclave_INCLUDE_DIRS}")
+else()
+    message(WARNING "Enclave (${ENCLAVE_NAME}): OpenEnclave_INCLUDE_DIRS not set. OE headers might not be found. Trying default /opt/openenclave/include.")
+    # Fallback if the variable isn't set, though it should be.
+    target_include_directories(${ENCLAVE_NAME} PRIVATE /opt/openenclave/include)
+endif()
+
+# 2. ONNX Runtime headers for the enclave (if enclave uses ONNX C API directly)
+#    GLOBAL_ONNXRUNTIME_INCLUDE_DIR is set in the root CMakeLists.txt
 if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
     target_include_directories(${ENCLAVE_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
     message(STATUS "Enclave (${ENCLAVE_NAME}): Added ONNX Runtime include directory: ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
 else()
     message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not set or invalid. ONNX headers might not be found.")
 endif()
+
+# 3. Generated EDL headers directory (already handled by include_directories(${EDL_GENERATED_DIR}) in root CMakeLists.txt,
+#    but target_include_directories is more modern for target-specific includes).
+#    If issues persist, you can uncomment this:
+# target_include_directories(${ENCLAVE_NAME} PRIVATE ${EDL_GENERATED_DIR})
+
 
 # Optional: Set the Open Enclave API version
 # target_compile_definitions(${ENCLAVE_NAME} PRIVATE OE_API_VERSION=2)
