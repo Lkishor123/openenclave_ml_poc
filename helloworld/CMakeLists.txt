@@ -29,6 +29,35 @@ message(STATUS "  OE Edger8r: ${openenclave_EDGER8R}")
 message(STATUS "  OE Sign Tool: ${openenclave_SIGNTOOL}")
 message(STATUS "  OE Include Dirs: ${openenclave_INCLUDE_DIRS}")
 
+# --- BEGIN WORKAROUND for oeedger8r and oesigntool ---
+if(OEEDGER8R_DIRECT_PATH AND (NOT openenclave_EDGER8R OR openenclave_EDGER8R STREQUAL ""))
+    message(STATUS "  WORKAROUND: Manually setting openenclave_EDGER8R using find_program result: ${OEEDGER8R_DIRECT_PATH}")
+    set(openenclave_EDGER8R ${OEEDGER8R_DIRECT_PATH} CACHE FILEPATH "Path to oeedger8r (set by workaround)" FORCE)
+    
+    # Attempt to find oesigntool relative to oeedger8r or in common paths
+    # Assuming OEEDGER8R_DIRECT_PATH is something like /opt/openenclave/bin/oeedger8r
+    get_filename_component(OE_BIN_DIR ${OEEDGER8R_DIRECT_PATH} DIRECTORY)
+    
+    if(NOT openenclave_SIGNTOOL OR openenclave_SIGNTOOL STREQUAL "")
+        find_program(OESIGNTOOL_WORKAROUND_PATH oesigntool HINTS ${OE_BIN_DIR})
+        if(OESIGNTOOL_WORKAROUND_PATH)
+            message(STATUS "  WORKAROUND: Manually setting openenclave_SIGNTOOL using find_program result: ${OESIGNTOOL_WORKAROUND_PATH}")
+            set(openenclave_SIGNTOOL ${OESIGNTOOL_WORKAROUND_PATH} CACHE FILEPATH "Path to oesigntool (set by workaround)" FORCE)
+        else()
+            message(WARNING "  WORKAROUND: Could not find oesigntool even with HINTS ${OE_BIN_DIR}.")
+        endif()
+    endif()
+elseif(NOT OEEDGER8R_DIRECT_PATH AND (NOT openenclave_EDGER8R OR openenclave_EDGER8R STREQUAL ""))
+    message(WARNING "  WORKAROUND for oeedger8r SKIPPED: Direct find_program also failed to find oeedger8r.")
+endif()
+# --- END WORKAROUND ---
+
+# These messages will now show the values after the workaround attempt
+message(STATUS "  OE Edger8r (after workaround): ${openenclave_EDGER8R}")
+message(STATUS "  OE Sign Tool (after workaround): ${openenclave_SIGNTOOL}")
+message(STATUS "  OE Include Dirs: ${openenclave_INCLUDE_DIRS}") # This should be fine
+
+
 if(NOT openenclave_EDGER8R)
     message(FATAL_ERROR "OpenEnclave Edger8r (oeedger8r) not found by CMake. Ensure OE environment is sourced.")
 endif()
