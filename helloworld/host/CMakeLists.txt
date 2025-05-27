@@ -28,29 +28,22 @@ message(STATUS "  Host executable: ${HOST_APP_NAME}")
 
 # --- Convenience 'run' Targets (Optional) ---
 
-# Path to where the signed enclave will be built by the enclave's CMakeLists.txt
-# ENCLAVE_NAME should be consistent with the one set in enclave/CMakeLists.txt
-set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave") # e.g., build/enclave/
+set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave")
 set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/helloworld_enclave.signed.so")
 
-# Custom target to run the host with the signed enclave.
 add_custom_target(run
     COMMAND ./${HOST_APP_NAME} ${SIGNED_ENCLAVE_FULL_PATH}
-    # Depends on the host executable and the custom target that produces the signed enclave.
-    # 'helloworld_enclave_signed' is the custom target defined in enclave/CMakeLists.txt.
     DEPENDS ${HOST_APP_NAME} helloworld_enclave_signed
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Runs from build/host/
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running helloworld sample with signed enclave."
 )
 
-# Custom target to run the host in simulation mode with the signed enclave.
 add_custom_target(run_simulate
     COMMAND ./${HOST_APP_NAME} ${SIGNED_ENCLAVE_FULL_PATH} --simulate
     DEPENDS ${HOST_APP_NAME} helloworld_enclave_signed
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Runs from build/host/
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running helloworld sample in SIMULATION mode with signed enclave."
 )
 
 message(STATUS "  To run: 'make run' or 'make run_simulate' (after successful build).")
 message(STATUS "  Run targets expect signed enclave at: ${SIGNED_ENCLAVE_FULL_PATH}")
-
