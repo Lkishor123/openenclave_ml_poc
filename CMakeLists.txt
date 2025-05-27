@@ -1,101 +1,157 @@
-# openenclave_ml_poc/enclave/CMakeLists.txt
+# openenclave_ml_poc/CMakeLists.txt (Root)
 cmake_minimum_required(VERSION 3.16)
+project(OpenEnclaveMLPoC CXX C)
 
-set(ENCLAVE_NAME enclave_prod) # Your enclave's target name
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11) 
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Create the executable target initially without explicit sources.
-add_executable(${ENCLAVE_NAME} "")
+# --- Build Type Handling ---
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to 'Release' as none was specified.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-# Add all source files (existing and generated) to the target.
-target_sources(${ENCLAVE_NAME} PRIVATE
-    enclave.cpp         # Your main enclave C++ file
-    ${EDL_TRUSTED_C}    # Generated trusted EDL C file from root CMakeLists.txt
-)
+# --- Define Open Enclave Crypto Library ---
+set(OE_CRYPTO_LIB "mbedtls" CACHE STRING "Open Enclave Crypto Library (mbedtls or openssl)")
+message(STATUS "Using Open Enclave Crypto Library: ${OE_CRYPTO_LIB}")
 
-# Link the enclave executable against the required Open Enclave libraries.
-# OE_CRYPTO_LIB is set in the root CMakeLists.txt (e.g., to "mbedtls")
-target_link_libraries(${ENCLAVE_NAME} PRIVATE
-    openenclave::oeenclave
-    openenclave::oelibcxx         # For C++ enclave code
-    openenclave::oecryptombedtls  # Or openenclave::oecryptoopenssl if OE_CRYPTO_LIB is "openssl"
-    # Consider adding openenclave::oecore if specific core symbols are missing.
+# --- Find Open Enclave SDK ---
+# This is the crucial step. It should define OpenEnclave_FOUND, OpenEnclave_DIR,
+# OpenEnclave_INCLUDE_DIRS, and IMPORTED targets like openenclave::oehost, openenclave::oeenclave.
+find_package(OpenEnclave CONFIG REQUIRED)
 
-    # The ONNX Runtime library is NOT linked directly into the enclave with this strategy.
-    # The enclave will make OCALLs to the host for ONNX operations.
-)
-
-# Add Include Directories:
-# 1. Open Enclave SDK include directories.
-if(OpenEnclave_INCLUDE_DIRS)
-    target_include_directories(${ENCLAVE_NAME} PRIVATE ${OpenEnclave_INCLUDE_DIRS})
-    message(STATUS "Enclave (${ENCLAVE_NAME}): Added OpenEnclave SDK include directories: ${OpenEnclave_INCLUDE_DIRS}")
-else()
-    message(WARNING "Enclave (${ENCLAVE_NAME}): OpenEnclave_INCLUDE_DIRS not set. OE headers might not be found. Trying default /opt/openenclave/include.")
-    target_include_directories(${ENCLAVE_NAME} PRIVATE /opt/openenclave/include)
+if(NOT OpenEnclave_FOUND)
+    message(FATAL_ERROR "OpenEnclave SDK not found by find_package! Check OE_SDK_PATH or CMake prefix paths.")
 endif()
 
-# 2. ONNX Runtime headers for the enclave
-#    These might still be useful if the enclave needs to understand ONNX tensor structures
-#    or data types, even if it doesn't call the ONNX API directly.
-#    If your enclave code no longer refers to any onnxruntime_c_api.h types, you can remove this.
-if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
-    target_include_directories(${ENCLAVE_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
-    message(STATUS "Enclave (${ENCLAVE_NAME}): Added ONNX Runtime include directory: ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
+message(STATUS "[ROOT] Found OpenEnclave SDK version: ${OpenEnclave_VERSION}")
+message(STATUS "  [ROOT] OpenEnclave CMake module directory (OpenEnclave_DIR): ${OpenEnclave_DIR}")
+message(STATUS "  [ROOT] OpenEnclave Include Dirs (OpenEnclave_INCLUDE_DIRS): ${OpenEnclave_INCLUDE_DIRS}")
+
+# Diagnostic: Check if key OE targets are defined AFTER find_package
+if(TARGET openenclave::oehost)
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oehost' IS defined.")
 else()
-    message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not set or invalid. ONNX headers might not be found.")
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oehost' IS NOT defined after find_package. This is a critical issue. Check SDK's CMake files in ${OpenEnclave_DIR}.")
+endif()
+if(TARGET openenclave::oeenclave)
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS defined.")
+else()
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS NOT defined after find_package. This is a critical issue.")
+endif()
+if(TARGET openenclave::oeedger8r)
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
+else()
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS NOT defined after find_package.")
+endif()
+if(NOT OpenEnclave_INCLUDE_DIRS)
+    message(FATAL_ERROR "  [ROOT DIAG] OpenEnclave_INCLUDE_DIRS is NOT set by find_package. This is a critical issue.")
 endif()
 
-# Optional: Set the Open Enclave API version
-# target_compile_definitions(${ENCLAVE_NAME} PRIVATE OE_API_VERSION=2)
+# --- Find ONNX Runtime ---
+option(ONNXRUNTIME_ROOT_DIR "Root directory of the ONNX Runtime prebuilt library and headers" "/opt/onnxruntime")
+message(STATUS "Attempting to use ONNXRUNTIME_ROOT_DIR: ${ONNXRUNTIME_ROOT_DIR} (This can be overridden with -D parameter)")
 
-# Ensure that the EDL generation target (GenerateEDL from root CMakeLists.txt)
-# is completed before attempting to build this enclave.
-add_dependencies(${ENCLAVE_NAME} GenerateEDL)
+set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT_DIR}/include")
+set(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_ROOT_DIR}/lib")
 
-message(STATUS "Configuring Enclave (using add_executable \"\" and target_sources): ${ENCLAVE_NAME}")
-message(STATUS "  Enclave sources added via target_sources: enclave.cpp, ${EDL_TRUSTED_C}")
-message(STATUS "  Unsigned enclave executable: ${ENCLAVE_NAME}")
+if(NOT EXISTS "${ONNXRUNTIME_ROOT_DIR}")
+    message(FATAL_ERROR "ONNXRUNTIME_ROOT_DIR '${ONNXRUNTIME_ROOT_DIR}' does not exist.")
+endif()
+if(NOT EXISTS "${ONNXRUNTIME_INCLUDE_DIR}/onnxruntime_c_api.h")
+    message(FATAL_ERROR "ONNX Runtime header 'onnxruntime_c_api.h' not found in ${ONNXRUNTIME_INCLUDE_DIR}.")
+endif()
 
-# --- Enclave Signing ---
-set(ENCLAVE_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave.conf) 
-set(ENCLAVE_PRIVATE_KEY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave_private.pem) 
-
-find_package(OpenSSL)
-if(OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
-    add_custom_command(OUTPUT ${ENCLAVE_PRIVATE_KEY_FILE}
-        COMMAND ${OpenSSL_EXECUTABLE} genrsa -out ${ENCLAVE_PRIVATE_KEY_FILE} -3 3072
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating self-signed key pair (enclave_private.pem) for enclave signing (DEMO ONLY, if key not present)"
-        VERBATIM)
-    message(STATUS "Attempting to generate demo key: ${ENCLAVE_PRIVATE_KEY_FILE} (if it does not exist)")
-else()
-    if(NOT OpenSSL_FOUND)
-        message(WARNING "OpenSSL not found. Cannot generate demo private key. Ensure ${ENCLAVE_PRIVATE_KEY_FILE} exists.")
-    endif()
-    if(EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
-         message(STATUS "Using existing private key: ${ENCLAVE_PRIVATE_KEY_FILE}")
-    else()
-         message(WARNING "Private key ${ENCLAVE_PRIVATE_KEY_FILE} not found and OpenSSL not available to generate it (or key generation command not run).")
+find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime PATHS "${ONNXRUNTIME_LIBRARY_DIR}" NO_DEFAULT_PATH)
+if(NOT ONNXRUNTIME_LIBRARY)
+    find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime PATHS "${ONNXRUNTIME_LIBRARY_DIR}") 
+    if(NOT ONNXRUNTIME_LIBRARY)
+        message(FATAL_ERROR "libonnxruntime not found in ${ONNXRUNTIME_LIBRARY_DIR}.")
     endif()
 endif()
+message(STATUS "  ONNX Runtime Include Dir: ${ONNXRUNTIME_INCLUDE_DIR}")
+message(STATUS "  ONNX Runtime Library: ${ONNXRUNTIME_LIBRARY}")
 
-set(SIGNED_ENCLAVE_FILE ${CMAKE_CURRENT_BINARY_DIR}/${ENCLAVE_NAME}.signed.so)
+set(GLOBAL_ONNXRUNTIME_INCLUDE_DIR ${ONNXRUNTIME_INCLUDE_DIR} CACHE INTERNAL "ONNX Runtime include directory")
+set(GLOBAL_ONNXRUNTIME_LIBRARY ${ONNXRUNTIME_LIBRARY} CACHE INTERNAL "ONNX Runtime library path")
 
-add_custom_command(OUTPUT ${SIGNED_ENCLAVE_FILE}
-    DEPENDS
-        ${ENCLAVE_NAME}                 
-        ${ENCLAVE_CONF_FILE}            
-        ${ENCLAVE_PRIVATE_KEY_FILE}     
-    COMMAND openenclave::oesign sign    
-            -e $<TARGET_FILE:${ENCLAVE_NAME}>
-            -c ${ENCLAVE_CONF_FILE}
-            -k ${ENCLAVE_PRIVATE_KEY_FILE}
-            -o ${SIGNED_ENCLAVE_FILE}   
-    COMMENT "Signing enclave ${ENCLAVE_NAME} -> ${SIGNED_ENCLAVE_FILE}"
+# --- EDL File Processing ---
+set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/enclave.edl) 
+set(EDL_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/edl_generated)
+
+add_custom_command(OUTPUT ${EDL_GENERATED_DIR}/.dir_stamp
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${EDL_GENERATED_DIR}
+    COMMAND ${CMAKE_COMMAND} -E touch ${EDL_GENERATED_DIR}/.dir_stamp
+    COMMENT "Creating EDL generated files directory: ${EDL_GENERATED_DIR}"
     VERBATIM)
 
-add_custom_target(${ENCLAVE_NAME}_signed ALL
-    DEPENDS ${SIGNED_ENCLAVE_FILE})
+set(EDL_TRUSTED_C ${EDL_GENERATED_DIR}/enclave_t.c)
+set(EDL_TRUSTED_H ${EDL_GENERATED_DIR}/enclave_t.h)
+set(EDL_UNTRUSTED_C ${EDL_GENERATED_DIR}/enclave_u.c)
+set(EDL_UNTRUSTED_H ${EDL_GENERATED_DIR}/enclave_u.h)
+set(EDL_UNTRUSTED_ARGS_H ${EDL_GENERATED_DIR}/enclave_args.h)
 
-message(STATUS "  Signed enclave will be: ${SIGNED_ENCLAVE_FILE}")
-message(STATUS "  Ensure ${ENCLAVE_CONF_FILE} and ${ENCLAVE_PRIVATE_KEY_FILE} exist for signing.")
+add_custom_command(
+    OUTPUT ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} 
+    COMMAND openenclave::oeedger8r
+            --trusted ${EDL_FILE}
+            --trusted-dir ${EDL_GENERATED_DIR}
+            --search-path ${OpenEnclave_INCLUDE_DIRS} 
+    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp
+    COMMENT "Running oeedger8r (trusted) on ${EDL_FILE}"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
+    COMMAND openenclave::oeedger8r
+            --untrusted ${EDL_FILE}
+            --untrusted-dir ${EDL_GENERATED_DIR}
+            --search-path ${OpenEnclave_INCLUDE_DIRS} 
+    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp
+    COMMENT "Running oeedger8r (untrusted) on ${EDL_FILE}"
+    VERBATIM)
+
+set_source_files_properties(
+    ${EDL_TRUSTED_C} ${EDL_TRUSTED_H}
+    ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
+    PROPERTIES GENERATED TRUE
+)
+
+add_custom_target(GenerateEDL ALL
+    DEPENDS ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
+)
+
+# Make generated EDL headers and OE SDK headers available globally
+include_directories(${EDL_GENERATED_DIR})
+include_directories(${OpenEnclave_INCLUDE_DIRS}) # Ensures subdirectories also get OE headers
+
+# Set variables for subdirectories (CACHE INTERNAL ensures they are passed down)
+set(EDL_TRUSTED_C_PATH ${EDL_TRUSTED_C} CACHE INTERNAL "Path to trusted C for EDL")
+set(EDL_UNTRUSTED_C_PATH ${EDL_UNTRUSTED_C} CACHE INTERNAL "Path to untrusted C for EDL")
+
+
+# --- Add Subdirectories for Host and Enclave ---
+add_subdirectory(enclave)
+add_subdirectory(host)
+
+# --- Copy Model to Build Directory ---
+set(MODEL_SOURCE_PATH ${CMAKE_SOURCE_DIR}/model/simple_model.onnx) 
+set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
+set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/simple_model.onnx) 
+
+if(EXISTS ${MODEL_SOURCE_PATH})
+    add_custom_command(
+        TARGET GenerateEDL POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${MODEL_BUILD_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MODEL_SOURCE_PATH} ${MODEL_DEST_PATH}
+        COMMENT "Copying ONNX model to build directory: ${MODEL_DEST_PATH}"
+        VERBATIM)
+else()
+    message(WARNING "ONNX model file not found at ${MODEL_SOURCE_PATH}.")
+endif()
+
+message(STATUS "Root ML PoC CMake configuration complete. Build type: ${CMAKE_BUILD_TYPE}")
