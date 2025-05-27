@@ -1,117 +1,77 @@
+# ~/openenclave_ml_poc/helloworld/CMakeLists.txt
+
 cmake_minimum_required(VERSION 3.16)
 project(HelloWorldSample C CXX)
 
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 11) # Or 14/17 if needed, though C is primary here
+set(CMAKE_CXX_STANDARD 11) # As per your original helloworld sample
 
-# Find Open Enclave SDK
-# This relies on sourcing openenclaverc or having OE_SDK_PATH set.
-# --- BEGIN DIAGNOSTIC ---
-message(STATUS "Attempting to find oeedger8r with find_program...")
-find_program(OEEDGER8R_DIRECT_PATH oeedger8r
-             HINTS /opt/openenclave/bin $ENV{OE_SDK_PATH}/bin $ENV{OE_SDK_PATH}/tools
-             PATHS $ENV{PATH} /usr/bin /usr/local/bin)
-if(OEEDGER8R_DIRECT_PATH)
-    message(STATUS "  Direct find_program found oeedger8r at: ${OEEDGER8R_DIRECT_PATH}")
-else()
-    message(WARNING "  Direct find_program COULD NOT find oeedger8r.")
-    message(STATUS "    Current CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-    message(STATUS "    Current ENV{PATH}: $ENV{PATH}")
-    message(STATUS "    Current ENV{OE_SDK_PATH}: $ENV{OE_SDK_PATH}")
-endif()
-# --- END DIAGNOSTIC ---
-
-find_package(openenclave REQUIRED) # Existing line
-# ... rest of your CMakeLists.txt
-find_package(openenclave REQUIRED)
-message(STATUS "Found OpenEnclave SDK version: ${openenclave_VERSION}")
-message(STATUS "  OE Edger8r: ${openenclave_EDGER8R}")
-message(STATUS "  OE Sign Tool: ${openenclave_SIGNTOOL}")
-message(STATUS "  OE Include Dirs: ${openenclave_INCLUDE_DIRS}")
-
-# --- BEGIN WORKAROUND for oeedger8r and oesigntool ---
-if(OEEDGER8R_DIRECT_PATH AND (NOT openenclave_EDGER8R OR openenclave_EDGER8R STREQUAL ""))
-    message(STATUS "  WORKAROUND: Manually setting openenclave_EDGER8R using find_program result: ${OEEDGER8R_DIRECT_PATH}")
-    set(openenclave_EDGER8R ${OEEDGER8R_DIRECT_PATH} CACHE FILEPATH "Path to oeedger8r (set by workaround)" FORCE)
-    
-    # Attempt to find oesigntool relative to oeedger8r or in common paths
-    # Assuming OEEDGER8R_DIRECT_PATH is something like /opt/openenclave/bin/oeedger8r
-    get_filename_component(OE_BIN_DIR ${OEEDGER8R_DIRECT_PATH} DIRECTORY)
-    
-    if(NOT openenclave_SIGNTOOL OR openenclave_SIGNTOOL STREQUAL "")
-        find_program(OESIGNTOOL_WORKAROUND_PATH oesigntool HINTS ${OE_BIN_DIR})
-        if(OESIGNTOOL_WORKAROUND_PATH)
-            message(STATUS "  WORKAROUND: Manually setting openenclave_SIGNTOOL using find_program result: ${OESIGNTOOL_WORKAROUND_PATH}")
-            set(openenclave_SIGNTOOL ${OESIGNTOOL_WORKAROUND_PATH} CACHE FILEPATH "Path to oesigntool (set by workaround)" FORCE)
-        else()
-            message(WARNING "  WORKAROUND: Could not find oesigntool even with HINTS ${OE_BIN_DIR}.")
-        endif()
-    endif()
-elseif(NOT OEEDGER8R_DIRECT_PATH AND (NOT openenclave_EDGER8R OR openenclave_EDGER8R STREQUAL ""))
-    message(WARNING "  WORKAROUND for oeedger8r SKIPPED: Direct find_program also failed to find oeedger8r.")
-endif()
-# --- END WORKAROUND ---
-
-# These messages will now show the values after the workaround attempt
-message(STATUS "  OE Edger8r (after workaround): ${openenclave_EDGER8R}")
-message(STATUS "  OE Sign Tool (after workaround): ${openenclave_SIGNTOOL}")
-message(STATUS "  OE Include Dirs: ${openenclave_INCLUDE_DIRS}") # This should be fine
-
-
-if(NOT openenclave_EDGER8R)
-    message(FATAL_ERROR "OpenEnclave Edger8r (oeedger8r) not found by CMake. Ensure OE environment is sourced.")
-endif()
+# Use find_package as per the Open Enclave SDK documentation
+# This should make targets like openenclave::oeedger8r available.
+find_package(OpenEnclave CONFIG REQUIRED)
+message(STATUS "Found OpenEnclave SDK version: ${OpenEnclave_VERSION}")
+message(STATUS "  OpenEnclave CMake module directory: ${OpenEnclave_DIR}")
 
 # --- EDL File Processing ---
-set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/helloworld.edl)
+# Define the location of your EDL file.
+# Assuming it's in a 'common' subdirectory relative to this CMakeLists.txt
+set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/helloworld.edl) # Ensure this path is correct
+
+# Define where the generated EDL files will be placed (within the build directory)
 set(EDL_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/edl_generated)
 
-# Create directory for generated files
-add_custom_command(OUTPUT ${EDL_GENERATED_DIR}/.dir_stamp
+# Ensure the output directory for EDL files exists before edger8r runs
+add_custom_command(OUTPUT ${EDL_GENERATED_DIR}/.dir_stamp # Dummy file to represent directory creation
     COMMAND ${CMAKE_COMMAND} -E make_directory ${EDL_GENERATED_DIR}
     COMMAND ${CMAKE_COMMAND} -E touch ${EDL_GENERATED_DIR}/.dir_stamp
     COMMENT "Creating EDL generated files directory: ${EDL_GENERATED_DIR}"
     VERBATIM)
 
-# Generate trusted files (for enclave)
+# Define the expected output files from oeedger8r for the trusted part
 set(EDL_TRUSTED_C ${EDL_GENERATED_DIR}/helloworld_t.c)
 set(EDL_TRUSTED_H ${EDL_GENERATED_DIR}/helloworld_t.h)
+# oeedger8r will also generate helloworld_args.h if needed.
+
+# Custom command to run oeedger8r for the trusted part
 add_custom_command(
-    OUTPUT ${EDL_TRUSTED_C} ${EDL_TRUSTED_H}
-    COMMAND ${openenclave_EDGER8R} --trusted ${EDL_FILE}
+    OUTPUT ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} # Add helloworld_args.h here if your trusted code needs it
+    COMMAND openenclave::oeedger8r # Use the imported target
+            --trusted ${EDL_FILE}
             --trusted-dir ${EDL_GENERATED_DIR}
-            --search-path ${openenclave_INCLUDE_DIRS} # For openenclave/edl/syscall.edl, platform.edl
-            # The README example also uses --search-path /opt/openenclave/include/openenclave/edl/sgx
-            # This might be needed if platform.edl is SGX specific and not found by default search path
-            # For now, rely on openenclave_INCLUDE_DIRS which should contain the necessary paths.
-            # If building for SGX explicitly:
-            # --search-path ${openenclave_INCLUDE_DIRS}/openenclave/edl/sgx # If such structure exists
-    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp
+            # Example: --search-path /opt/openenclave/include # If needed and not picked up automatically
+    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp # Depends on EDL file and directory creation
     COMMENT "Running oeedger8r (trusted) on ${EDL_FILE}"
     VERBATIM)
 
-# Generate untrusted files (for host)
+# Define the expected output files from oeedger8r for the untrusted part
 set(EDL_UNTRUSTED_C ${EDL_GENERATED_DIR}/helloworld_u.c)
 set(EDL_UNTRUSTED_H ${EDL_GENERATED_DIR}/helloworld_u.h)
-set(EDL_UNTRUSTED_ARGS_H ${EDL_GENERATED_DIR}/helloworld_args.h) # oeedger8r also creates _args.h
+set(EDL_UNTRUSTED_ARGS_H ${EDL_GENERATED_DIR}/helloworld_args.h) # Common output
+
+# Custom command to run oeedger8r for the untrusted part
 add_custom_command(
     OUTPUT ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
-    COMMAND ${openenclave_EDGER8R} --untrusted ${EDL_FILE}
+    COMMAND openenclave::oeedger8r # Use the imported target
+            --untrusted ${EDL_FILE}
             --untrusted-dir ${EDL_GENERATED_DIR}
-            --search-path ${openenclave_INCLUDE_DIRS}
-            # Similar SGX search path consideration as above if needed
-    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp
+            # Example: --search-path /opt/openenclave/include # If needed
+    DEPENDS ${EDL_FILE} ${EDL_GENERATED_DIR}/.dir_stamp # Depends on EDL file and directory creation
     COMMENT "Running oeedger8r (untrusted) on ${EDL_FILE}"
     VERBATIM)
 
-# Custom target for EDL generation
-add_custom_target(GenerateEDL ALL
+# Add a custom target for EDL generation.
+# This target ensures that the EDL files are generated before targets that depend on them are built.
+add_custom_target(GenerateEDL ALL # 'ALL' makes it a default target
     DEPENDS ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
 )
 
-# Include directory for generated EDL headers for all targets
+# Include directory for generated EDL headers for all targets in this project
+# This allows #include "helloworld_t.h" or #include "helloworld_u.h" to work.
 include_directories(${EDL_GENERATED_DIR})
 
-# Add subdirectories for host and enclave
+# Add subdirectories for host and enclave.
+# Their CMakeLists.txt files will define the actual executables.
 add_subdirectory(enclave)
 add_subdirectory(host)
+
+message(STATUS "Root helloworld CMake configuration complete.")

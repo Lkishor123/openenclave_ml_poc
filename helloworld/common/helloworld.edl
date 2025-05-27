@@ -1,18 +1,9 @@
+// helloworld/common/helloworld.edl
 enclave {
-    from "openenclave/edl/syscall.edl" import *;
-    // The README mentions "platform.edl". This is often an SDK-provided EDL file.
-    // If oeedger8r cannot find it, it might be located in:
-    // /opt/openenclave/include/openenclave/edl/platform.edl or
-    // /opt/openenclave/include/openenclave/edl/sgx/platform.edl
-    // For now, we assume it's discoverable via standard SDK include paths.
-    // If errors occur related to finding "platform.edl", this line might need adjustment
-    // or a local empty platform.edl might be needed if it's just a placeholder.
-    from "platform.edl" import *;
-
+    from "openenclave/edl/logging.edl" import oe_log_set_filter; // Example import
     trusted {
         public void enclave_helloworld();
     };
-
     untrusted {
         void host_helloworld();
     };
