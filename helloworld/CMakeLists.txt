@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.16)
 project(HelloWorldSample C CXX)
 
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 11) # As per your original helloworld sample
+set(CMAKE_CXX_STANDARD 11)
 
 # Use find_package as per the Open Enclave SDK documentation
 find_package(OpenEnclave CONFIG REQUIRED)
@@ -28,7 +28,7 @@ set(EDL_UNTRUSTED_H ${EDL_GENERATED_DIR}/helloworld_u.h)
 set(EDL_UNTRUSTED_ARGS_H ${EDL_GENERATED_DIR}/helloworld_args.h)
 
 add_custom_command(
-    OUTPUT ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} # Add helloworld_args.h here if your trusted code needs it
+    OUTPUT ${EDL_TRUSTED_C} ${EDL_TRUSTED_H}
     COMMAND openenclave::oeedger8r
             --trusted ${EDL_FILE}
             --trusted-dir ${EDL_GENERATED_DIR}
@@ -45,17 +45,20 @@ add_custom_command(
     COMMENT "Running oeedger8r (untrusted) on ${EDL_FILE}"
     VERBATIM)
 
-# Explicitly mark EDL outputs as generated. This helps CMake understand they will exist at build time.
+# Explicitly mark EDL outputs as generated.
+# This tells CMake not to expect these files to exist at configuration time.
 set_source_files_properties(
     ${EDL_TRUSTED_C} ${EDL_TRUSTED_H}
     ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
     PROPERTIES GENERATED TRUE
 )
 
+# This target ensures the custom commands for EDL generation are run.
 add_custom_target(GenerateEDL ALL
     DEPENDS ${EDL_TRUSTED_C} ${EDL_TRUSTED_H} ${EDL_UNTRUSTED_C} ${EDL_UNTRUSTED_H} ${EDL_UNTRUSTED_ARGS_H}
 )
 
+# Add the directory containing generated headers to the include path for all targets.
 include_directories(${EDL_GENERATED_DIR})
 
 add_subdirectory(enclave)
