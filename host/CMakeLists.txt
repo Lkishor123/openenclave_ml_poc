@@ -36,21 +36,22 @@ message(STATUS "  Host sources added: ${CMAKE_CURRENT_SOURCE_DIR}/host.cpp, ${ED
 
 # --- Convenience 'run' Target ---
 set(ENCLAVE_TARGET_NAME enclave_prod) 
-set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave")
+set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave") # Resolves to build/enclave/
 set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}.signed.so")
 
-# MODEL_DEST_PATH is defined in the root CMakeLists.txt
+# MODEL_DEST_PATH is defined in the root CMakeLists.txt (e.g. build/model/simple_model.onnx)
+# The host executable (ml_host_prod) is in ${CMAKE_CURRENT_BINARY_DIR} which is build/host/
 add_custom_target(run
     COMMAND ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH}
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed 
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host 
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Corrected: Execute from build/host/
     COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_DEST_PATH}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
 )
 
 add_custom_target(run_simulate
     COMMAND ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH} --simulate 
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host 
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Corrected: Execute from build/host/
     COMMENT "Running ML PoC in SIMULATION mode."
 )
 
