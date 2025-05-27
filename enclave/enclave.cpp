@@ -242,7 +242,7 @@ oe_result_t enclave_infer(
 
     if (!g_ort_session) {
         ENCLAVE_LOG("ERROR", "ONNX session not initialized. Call initialize_enclave_ml first.");
-        return OE_ERROR_INVALID_STATE;
+        return OE_UNEXPECTED;
     }
     if (!input_data || input_data_size_bytes == 0 ||
         !output_buffer || output_buffer_size_bytes == 0 ||
@@ -252,7 +252,7 @@ oe_result_t enclave_infer(
     }
     if (g_input_node_names_ptr.empty() || g_output_node_names_ptr.empty() || g_expected_input_dims.empty()) {
         ENCLAVE_LOG("ERROR", "Model input/output details not populated during init.");
-        return OE_ERROR_INVALID_STATE;
+        return OE_UNEXPECTED;
     }
     if (g_expected_input_type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
         ENCLAVE_LOG("ERROR", "This enclave_infer implementation currently only supports FLOAT inputs. Model expects type %d.", g_expected_input_type);
