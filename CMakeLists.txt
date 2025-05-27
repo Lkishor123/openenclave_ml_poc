@@ -20,8 +20,6 @@ set(OE_CRYPTO_LIB "mbedtls" CACHE STRING "Open Enclave Crypto Library (mbedtls o
 message(STATUS "Using Open Enclave Crypto Library: ${OE_CRYPTO_LIB}")
 
 # --- Find Open Enclave SDK ---
-# This is the crucial step. It should define OpenEnclave_FOUND, OpenEnclave_DIR,
-# OpenEnclave_INCLUDE_DIRS, and IMPORTED targets like openenclave::oehost, openenclave::oeenclave.
 find_package(OpenEnclave CONFIG REQUIRED)
 
 if(NOT OpenEnclave_FOUND)
@@ -30,26 +28,35 @@ endif()
 
 message(STATUS "[ROOT] Found OpenEnclave SDK version: ${OpenEnclave_VERSION}")
 message(STATUS "  [ROOT] OpenEnclave CMake module directory (OpenEnclave_DIR): ${OpenEnclave_DIR}")
-message(STATUS "  [ROOT] OpenEnclave Include Dirs (OpenEnclave_INCLUDE_DIRS): ${OpenEnclave_INCLUDE_DIRS}")
 
-# Diagnostic: Check if key OE targets are defined AFTER find_package
-if(TARGET openenclave::oehost)
-    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oehost' IS defined.")
-else()
-    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oehost' IS NOT defined after find_package. This is a critical issue. Check SDK's CMake files in ${OpenEnclave_DIR}.")
-endif()
-if(TARGET openenclave::oeenclave)
-    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS defined.")
-else()
-    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS NOT defined after find_package. This is a critical issue.")
-endif()
-if(TARGET openenclave::oeedger8r)
-    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
-else()
-    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS NOT defined after find_package.")
-endif()
+# Check and enforce OpenEnclave_INCLUDE_DIRS
 if(NOT OpenEnclave_INCLUDE_DIRS)
-    message(FATAL_ERROR "  [ROOT DIAG] OpenEnclave_INCLUDE_DIRS is NOT set by find_package. This is a critical issue.")
+    message(WARNING "  [ROOT DIAG] OpenEnclave_INCLUDE_DIRS was NOT set by find_package. Attempting to set manually to /opt/openenclave/include.")
+    set(OpenEnclave_INCLUDE_DIRS "/opt/openenclave/include" CACHE PATH "Open Enclave SDK include directory (manual fallback)" FORCE)
+    if(NOT EXISTS "${OpenEnclave_INCLUDE_DIRS}/openenclave/enclave.h") # Basic check for validity
+        message(FATAL_ERROR "  [ROOT DIAG] Manual fallback for OpenEnclave_INCLUDE_DIRS (${OpenEnclave_INCLUDE_DIRS}) does not seem to contain Open Enclave headers (checked for openenclave/enclave.h). Please verify the path to your Open Enclave SDK include directory.")
+    else()
+        message(STATUS "  [ROOT DIAG] OpenEnclave_INCLUDE_DIRS manually set to: ${OpenEnclave_INCLUDE_DIRS}")
+    endif()
+else()
+    message(STATUS "  [ROOT] OpenEnclave Include Dirs (OpenEnclave_INCLUDE_DIRS): ${OpenEnclave_INCLUDE_DIRS}")
+endif()
+
+# Diagnostic: Check if key OE targets are defined after find_package
+if(NOT TARGET openenclave::oehost)
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oehost' IS NOT defined after find_package. This is a critical issue. Check SDK's CMake files in ${OpenEnclave_DIR}.")
+else()
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oehost' IS defined.")
+endif()
+if(NOT TARGET openenclave::oeenclave)
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS NOT defined after find_package. This is a critical issue.")
+else()
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeenclave' IS defined.")
+endif()
+if(NOT TARGET openenclave::oeedger8r)
+    message(FATAL_ERROR "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS NOT defined after find_package.")
+else()
+    message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
 endif()
 
 # --- Find ONNX Runtime ---
@@ -127,11 +134,12 @@ add_custom_target(GenerateEDL ALL
 
 # Make generated EDL headers and OE SDK headers available globally
 include_directories(${EDL_GENERATED_DIR})
-include_directories(${OpenEnclave_INCLUDE_DIRS}) # Ensures subdirectories also get OE headers
+include_directories(${OpenEnclave_INCLUDE_DIRS}) 
 
-# Set variables for subdirectories (CACHE INTERNAL ensures they are passed down)
+# Set variables for subdirectories
 set(EDL_TRUSTED_C_PATH ${EDL_TRUSTED_C} CACHE INTERNAL "Path to trusted C for EDL")
 set(EDL_UNTRUSTED_C_PATH ${EDL_UNTRUSTED_C} CACHE INTERNAL "Path to untrusted C for EDL")
+set(GLOBAL_OpenEnclave_INCLUDE_DIRS ${OpenEnclave_INCLUDE_DIRS} CACHE INTERNAL "OpenEnclave SDK Include Dirs")
 
 
 # --- Add Subdirectories for Host and Enclave ---
@@ -139,7 +147,7 @@ add_subdirectory(enclave)
 add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
-set(MODEL_SOURCE_PATH ${CMAKE_SOURCE_DIR}/model/simple_model.onnx) 
+set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/simple_model.onnx) 
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
 set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/simple_model.onnx) 
 

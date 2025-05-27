@@ -23,16 +23,18 @@ target_link_libraries(${ENCLAVE_NAME} PRIVATE
 
 # Add Include Directories:
 # OpenEnclave_INCLUDE_DIRS should be globally available from root CMakeLists.txt's include_directories()
-# ONNX Runtime headers for the enclave:
+# GLOBAL_OpenEnclave_INCLUDE_DIRS is also available if needed for direct use.
+
+# ONNX Runtime headers for the enclave (if enclave needs to parse ONNX structures or data types)
 if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
     target_include_directories(${ENCLAVE_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
 else()
-    message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not properly set or found. ONNX headers might not be found.")
+    message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not properly set or found. ONNX headers might not be found if enclave.cpp uses them.")
 endif()
 
 add_dependencies(${ENCLAVE_NAME} GenerateEDL)
 
-message(STATUS "Configuring Enclave (using add_executable \"\" and target_sources): ${ENCLAVE_NAME}")
+message(STATUS "Configuring Enclave (using OCALL strategy): ${ENCLAVE_NAME}")
 message(STATUS "  Enclave sources added: ${CMAKE_CURRENT_SOURCE_DIR}/enclave.cpp, ${EDL_TRUSTED_C_PATH}")
 
 # --- Enclave Signing ---
@@ -47,7 +49,7 @@ if(OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
         COMMENT "Generating self-signed key pair (enclave_private.pem) (DEMO ONLY)"
         VERBATIM)
     message(STATUS "Attempting to generate demo key: ${ENCLAVE_PRIVATE_KEY_FILE}")
-else() # Handling other cases for message clarity
+else() 
     if(NOT OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
         message(WARNING "OpenSSL not found AND private key missing. Cannot generate demo key.")
     elseif(EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})

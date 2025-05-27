@@ -20,6 +20,8 @@ target_link_libraries(${HOST_APP_NAME} PRIVATE
 
 # Include Directories for Host:
 # OpenEnclave_INCLUDE_DIRS should be globally available from root CMakeLists.txt's include_directories()
+# GLOBAL_OpenEnclave_INCLUDE_DIRS is also available if needed.
+
 # ONNX Runtime headers for the host:
 if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
     target_include_directories(${HOST_APP_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
@@ -29,10 +31,10 @@ endif()
 
 add_dependencies(${HOST_APP_NAME} GenerateEDL)
 
-message(STATUS "Configuring Host Application (using add_executable \"\" and target_sources): ${HOST_APP_NAME}")
+message(STATUS "Configuring Host Application (using OCALL strategy): ${HOST_APP_NAME}")
 message(STATUS "  Host sources added: ${CMAKE_CURRENT_SOURCE_DIR}/host.cpp, ${EDL_UNTRUSTED_C_PATH}")
 
-# --- Convenience 'run' Target (Optional) ---
+# --- Convenience 'run' Target ---
 set(ENCLAVE_TARGET_NAME enclave_prod) 
 set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave")
 set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}.signed.so")
