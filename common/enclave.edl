@@ -1,8 +1,10 @@
 /* common/enclave.edl */
 enclave {
+    from "openenclave/edl/syscall.edl" import *;
+    from "openenclave/edl/sgx/platform.edl" import *;
     // Import SGX specific macros and definitions from Open Enclave SDK
     from "openenclave/edl/sgx/sgxmacros.edl" import *;
-
+    
     // Trusted functions (ECALLs) - callable from the host, executed inside the enclave
     trusted {
         /*
