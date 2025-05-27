@@ -11,21 +11,10 @@ target_sources(${ENCLAVE_NAME} PRIVATE
     ${EDL_TRUSTED_C}
 )
 
-# Link against Open Enclave libraries.
-# OE_CRYPTO_LIB is set in the parent CMakeLists.txt (e.g., to "mbedtls")
-# The actual target name for the mbedtls crypto wrapper is openenclave::oecryptombedtls
-# If OE_CRYPTO_LIB was "openssl", it might be openenclave::oecryptoopenssl (if available)
 target_link_libraries(${ENCLAVE_NAME} PRIVATE
     openenclave::oeenclave
     openenclave::oelibc
-    openenclave::oecryptombedtls # Explicitly link the mbedTLS crypto wrapper
-    # If you were using OpenSSL as the crypto lib (OE_CRYPTO_LIB=openssl),
-    # you would link openenclave::oecryptoopenssl instead, if such a target exists.
-    # The documentation implies openenclave::oecore and openenclave::oesyscall
-    # are also typically linked, but these might be pulled in by openenclave::oeenclave.
-    # If linker errors for symbols from those persist, add them:
-    # openenclave::oecore
-    # openenclave::oesyscall
+    openenclave::oecryptombedtls
 )
 
 add_dependencies(${ENCLAVE_NAME} GenerateEDL)
@@ -64,10 +53,11 @@ add_custom_command(OUTPUT ${SIGNED_ENCLAVE_FILE}
         ${ENCLAVE_NAME}
         ${ENCLAVE_CONF_FILE}
         ${ENCLAVE_PRIVATE_KEY_FILE}
-    COMMAND openenclave::oesign sign # Uses imported target
+    COMMAND openenclave::oesign sign
             -e $<TARGET_FILE:${ENCLAVE_NAME}>
             -c ${ENCLAVE_CONF_FILE}
             -k ${ENCLAVE_PRIVATE_KEY_FILE}
+            -o ${SIGNED_ENCLAVE_FILE}  # <-- ADD THIS LINE to specify output file
     COMMENT "Signing enclave ${ENCLAVE_NAME} -> ${SIGNED_ENCLAVE_FILE}"
     VERBATIM)
 
