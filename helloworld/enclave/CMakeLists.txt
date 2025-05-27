@@ -4,26 +4,30 @@ cmake_minimum_required(VERSION 3.16)
 
 set(ENCLAVE_NAME helloworld_enclave)
 
-# 1. Create the executable target initially WITHOUT listing any source files.
-#    Line 8 in your error message likely corresponds to this line if it's different.
-add_executable(${ENCLAVE_NAME} "") # Ensure this line has NO source files listed.
+add_executable(${ENCLAVE_NAME} "")
 
-# 2. Add all source files (existing and generated) to the target using target_sources.
-#    The ${EDL_TRUSTED_C} variable is defined in the parent CMakeLists.txt,
-#    and its GENERATED property is set there, which is critical.
 target_sources(${ENCLAVE_NAME} PRIVATE
-    enc.c             # Your existing, non-generated source file
-    ${EDL_TRUSTED_C}  # The generated source file from EDL
+    enc.c
+    ${EDL_TRUSTED_C}
 )
 
-# Link the enclave executable against the required Open Enclave libraries.
-target_link_libraries(${ENCLAVE_NAME} PRIVATE openenclave::oeenclave openenclave::oelibc)
+# Link against Open Enclave libraries.
+# OE_CRYPTO_LIB is set in the parent CMakeLists.txt (e.g., to "mbedtls")
+# The actual target name for the mbedtls crypto wrapper is openenclave::oecryptombedtls
+# If OE_CRYPTO_LIB was "openssl", it might be openenclave::oecryptoopenssl (if available)
+target_link_libraries(${ENCLAVE_NAME} PRIVATE
+    openenclave::oeenclave
+    openenclave::oelibc
+    openenclave::oecryptombedtls # Explicitly link the mbedTLS crypto wrapper
+    # If you were using OpenSSL as the crypto lib (OE_CRYPTO_LIB=openssl),
+    # you would link openenclave::oecryptoopenssl instead, if such a target exists.
+    # The documentation implies openenclave::oecore and openenclave::oesyscall
+    # are also typically linked, but these might be pulled in by openenclave::oeenclave.
+    # If linker errors for symbols from those persist, add them:
+    # openenclave::oecore
+    # openenclave::oesyscall
+)
 
-# Optional: Set the Open Enclave API version
-# target_compile_definitions(${ENCLAVE_NAME} PRIVATE OE_API_VERSION=2)
-
-# Ensure that the EDL generation target (GenerateEDL from root CMakeLists.txt)
-# is completed before attempting to build this enclave.
 add_dependencies(${ENCLAVE_NAME} GenerateEDL)
 
 message(STATUS "Configuring Enclave (using add_executable \"\" and target_sources): ${ENCLAVE_NAME}")
@@ -31,11 +35,9 @@ message(STATUS "  Enclave sources added via target_sources: enc.c, ${EDL_TRUSTED
 message(STATUS "  Unsigned enclave executable: ${ENCLAVE_NAME}")
 
 # --- Enclave Signing ---
-# (Ensure helloworld.conf and private.pem are in this directory: helloworld/enclave/)
 set(ENCLAVE_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/helloworld.conf)
 set(ENCLAVE_PRIVATE_KEY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/private.pem)
 
-# Optional: Command to generate a demo private key if it doesn't exist.
 find_package(OpenSSL)
 if(OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
     add_custom_command(OUTPUT ${ENCLAVE_PRIVATE_KEY_FILE}
@@ -59,10 +61,10 @@ set(SIGNED_ENCLAVE_FILE ${CMAKE_CURRENT_BINARY_DIR}/${ENCLAVE_NAME}.signed.so)
 
 add_custom_command(OUTPUT ${SIGNED_ENCLAVE_FILE}
     DEPENDS
-        ${ENCLAVE_NAME}                 # Depends on the unsigned enclave executable
-        ${ENCLAVE_CONF_FILE}            # Depends on the enclave configuration file
-        ${ENCLAVE_PRIVATE_KEY_FILE}     # Depends on the private key
-    COMMAND openenclave::oesign sign
+        ${ENCLAVE_NAME}
+        ${ENCLAVE_CONF_FILE}
+        ${ENCLAVE_PRIVATE_KEY_FILE}
+    COMMAND openenclave::oesign sign # Uses imported target
             -e $<TARGET_FILE:${ENCLAVE_NAME}>
             -c ${ENCLAVE_CONF_FILE}
             -k ${ENCLAVE_PRIVATE_KEY_FILE}
