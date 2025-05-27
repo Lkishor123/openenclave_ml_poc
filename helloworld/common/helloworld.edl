@@ -1,9 +1,8 @@
-// helloworld/common/helloworld.edl
 enclave {
-    from "openenclave/edl/logging.edl" import oe_log_set_filter; // Example import
     trusted {
         public void enclave_helloworld();
     };
+
     untrusted {
         void host_helloworld();
     };
