@@ -4,13 +4,17 @@ cmake_minimum_required(VERSION 3.16)
 
 set(HOST_APP_NAME helloworld_host)
 
-# Create the executable target with source files that exist at configuration time.
-add_executable(${HOST_APP_NAME} host.c)
+# 1. Create the executable target initially WITHOUT listing any source files.
+#    Line 8 in your error message likely corresponds to this line if it's different.
+add_executable(${HOST_APP_NAME} "") # Ensure this line has NO source files listed.
 
-# Add the generated untrusted C file to the target's sources.
-# The ${EDL_UNTRUSTED_C} variable is defined in the parent CMakeLists.txt.
-# The GENERATED property set on this file in the parent scope is important.
-target_sources(${HOST_APP_NAME} PRIVATE ${EDL_UNTRUSTED_C})
+# 2. Add all source files (existing and generated) to the target using target_sources.
+#    The ${EDL_UNTRUSTED_C} variable is defined in the parent CMakeLists.txt,
+#    and its GENERATED property is set there, which is critical.
+target_sources(${HOST_APP_NAME} PRIVATE
+    host.c            # Your existing, non-generated source file
+    ${EDL_UNTRUSTED_C} # The generated source file from EDL
+)
 
 # Link the host executable against the Open Enclave host library.
 target_link_libraries(${HOST_APP_NAME} PRIVATE openenclave::oehost)
@@ -19,9 +23,8 @@ target_link_libraries(${HOST_APP_NAME} PRIVATE openenclave::oehost)
 # is completed before attempting to build this host application.
 add_dependencies(${HOST_APP_NAME} GenerateEDL)
 
-message(STATUS "Configuring Host Application (using add_executable and target_sources): ${HOST_APP_NAME}")
-message(STATUS "  Host base source: host.c")
-message(STATUS "  Host generated source: ${EDL_UNTRUSTED_C}")
+message(STATUS "Configuring Host Application (using add_executable \"\" and target_sources): ${HOST_APP_NAME}")
+message(STATUS "  Host sources added via target_sources: host.c, ${EDL_UNTRUSTED_C}")
 message(STATUS "  Host executable: ${HOST_APP_NAME}")
 
 # --- Convenience 'run' Targets ---
