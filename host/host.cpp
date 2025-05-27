@@ -10,7 +10,7 @@
 
 // Open Enclave API
 #include <openenclave/host.h>
-#include <openenclave/result.h> 
+#include <openenclave/bits/result.h> 
 
 // ONNX Runtime C API
 #include <onnxruntime_c_api.h>
