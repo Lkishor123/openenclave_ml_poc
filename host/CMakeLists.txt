@@ -39,35 +39,31 @@ set(ENCLAVE_TARGET_NAME enclave_prod)
 set(ENCLAVE_BUILD_OUTPUT_DIR "${CMAKE_BINARY_DIR}/enclave") # Resolves to build/enclave/
 set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}.signed.so")
 
-# MODEL_DEST_PATH is defined in the root CMakeLists.txt (e.g. build/model/simple_model.onnx)
-# The host executable (ml_host_prod) is in ${CMAKE_CURRENT_BINARY_DIR} which is build/host/
+# Reconstruct the model path explicitly for the run target.
+# CMAKE_BINARY_DIR is the top-level build directory (e.g., /home/lk/openenclave_ml_poc/build)
+set(MODEL_PATH_FOR_RUN_TARGET "${CMAKE_BINARY_DIR}/model/simple_model.onnx") 
 
 # Get the directory of the ONNX Runtime library
-# GLOBAL_ONNXRUNTIME_LIBRARY is the full path to the .so file, e.g., /opt/onnxruntime/lib/libonnxruntime.so
 get_filename_component(HOST_ONNX_LIB_DIR ${GLOBAL_ONNXRUNTIME_LIBRARY} DIRECTORY)
-message(STATUS "[Host CMake] ONNX Runtime Library Directory for LD_LIBRARY_PATH: ${HOST_ONNX_LIB_DIR}")
-message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_DEST_PATH}")
 
+message(STATUS "[Host CMake] ONNX Runtime Library Directory for LD_LIBRARY_PATH: ${HOST_ONNX_LIB_DIR}")
+message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_PATH_FOR_RUN_TARGET}") # Verify this path
 
 add_custom_target(run
-    # Use CMAKE_COMMAND -E env to set LD_LIBRARY_PATH specifically for this command.
-    # This sets LD_LIBRARY_PATH to only HOST_ONNX_LIB_DIR. If other paths are needed from
-    # an existing LD_LIBRARY_PATH, this approach would need to be more complex (e.g., using a wrapper script).
-    # However, for a self-contained dependency like ONNX Runtime, this is often sufficient.
     COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}"
-            ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH}
+            ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH}
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed 
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
-    COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_DEST_PATH}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
+    COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_PATH_FOR_RUN_TARGET}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
     VERBATIM 
 )
 
 add_custom_target(run_simulate
     COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}"
-            ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH} --simulate 
+            ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --simulate 
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
-    COMMENT "Running ML PoC in SIMULATION mode."
+    COMMENT "Running ML PoC in SIMULATION mode. Model: ${MODEL_PATH_FOR_RUN_TARGET}"
     VERBATIM
 )
 
