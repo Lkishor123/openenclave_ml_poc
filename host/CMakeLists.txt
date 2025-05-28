@@ -43,18 +43,28 @@ set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}
 # The host executable (ml_host_prod) is in ${CMAKE_CURRENT_BINARY_DIR} which is build/host/
 
 # Get the directory of the ONNX Runtime library
+# GLOBAL_ONNXRUNTIME_LIBRARY is the full path to the .so file, e.g., /opt/onnxruntime/lib/libonnxruntime.so
 get_filename_component(HOST_ONNX_LIB_DIR ${GLOBAL_ONNXRUNTIME_LIBRARY} DIRECTORY)
+message(STATUS "[Host CMake] ONNX Runtime Library Directory for LD_LIBRARY_PATH: ${HOST_ONNX_LIB_DIR}")
+message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_DEST_PATH}")
+
 
 add_custom_target(run
-    COMMAND env LD_LIBRARY_PATH="${HOST_ONNX_LIB_DIR}:$ENV{LD_LIBRARY_PATH}" ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH}
+    # Use CMAKE_COMMAND -E env to set LD_LIBRARY_PATH specifically for this command.
+    # This sets LD_LIBRARY_PATH to only HOST_ONNX_LIB_DIR. If other paths are needed from
+    # an existing LD_LIBRARY_PATH, this approach would need to be more complex (e.g., using a wrapper script).
+    # However, for a self-contained dependency like ONNX Runtime, this is often sufficient.
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}"
+            ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH}
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed 
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_DEST_PATH}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
-    VERBATIM # Ensures $ENV{LD_LIBRARY_PATH} is expanded at build time if possible, or runtime.
+    VERBATIM 
 )
 
 add_custom_target(run_simulate
-    COMMAND env LD_LIBRARY_PATH="${HOST_ONNX_LIB_DIR}:$ENV{LD_LIBRARY_PATH}" ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH} --simulate 
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}"
+            ./${HOST_APP_NAME} ${MODEL_DEST_PATH} ${SIGNED_ENCLAVE_FULL_PATH} --simulate 
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC in SIMULATION mode."
