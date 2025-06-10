@@ -64,7 +64,7 @@ WORKDIR /app
 
 # Build the C++ application
 # Note: The WORKDIR is /app, so we cd into build from there.
-RUN rm -rf build && mkdir build && cd build && \
+RUN rm -rf build && mkdir build && \
     /opt/openenclave/bin/oeedger8r --trusted common/enclave.edl --trusted-dir build/edl_generated --search-path /opt/openenclave/include && \
     /opt/openenclave/bin/oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated --search-path /opt/openenclave/include && \
     cd build && \
