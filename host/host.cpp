@@ -1,4 +1,4 @@
-/* host/host.cpp - FINAL AND COMPLETE VERSION */
+/* host/host.cpp - FINAL VERSION WITH MEMORY DECOUPLING */
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -39,7 +39,6 @@ static const OrtApi* g_ort_api = nullptr;
             throw std::runtime_error(std::string("ONNX Runtime failed: ") + msg); \
         } \
     } while (0)
-
 
 // --- Host-side ONNX Runtime Globals ---
 static OrtEnv* g_host_ort_env = nullptr;
@@ -109,9 +108,9 @@ oe_result_t ocall_onnx_run_inference(
         OrtAllocator* allocator;
         ORT_CHECK(g_ort_api->GetAllocatorWithDefaultOptions(&allocator));
 
+        // Get Input and Output node names
         size_t num_input_nodes;
         ORT_CHECK(g_ort_api->SessionGetInputCount(session, &num_input_nodes));
-
         std::vector<std::string> input_node_names_str;
         std::vector<const char*> input_node_names_ptr;
         for (size_t i = 0; i < num_input_nodes; ++i) {
@@ -123,7 +122,6 @@ oe_result_t ocall_onnx_run_inference(
         for (const auto& name : input_node_names_str) {
             input_node_names_ptr.push_back(name.c_str());
         }
-
         std::string output_name_str;
         char* output_name_char_ptr;
         ORT_CHECK(g_ort_api->SessionGetOutputName(session, 0, allocator, &output_name_char_ptr));
@@ -131,28 +129,30 @@ oe_result_t ocall_onnx_run_inference(
         allocator->Free(allocator, output_name_char_ptr);
         const char* output_node_names[] = {output_name_str.c_str()};
         
+        // --- THE FIX: Create a local copy of the input data from the enclave ---
         size_t num_tokens = input_len_bytes / sizeof(int64_t);
-        const int64_t* input_ids_data_ptr = static_cast<const int64_t*>(input_data_from_enclave);
+        std::vector<int64_t> local_input_ids(num_tokens);
+        memcpy(local_input_ids.data(), input_data_from_enclave, input_len_bytes);
+        // --- END FIX ---
+
         std::vector<int64_t> attention_mask_data(num_tokens, 1);
         std::vector<int64_t> input_shape = {1, (int64_t)num_tokens};
         
         ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
         
+        // Build tensors in the correct order, now using only host-owned memory
         for (const auto& name : input_node_names_str) {
             OrtValue* tensor = nullptr;
             if (name == "input_ids") {
                 ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
-                    memory_info, const_cast<void*>(static_cast<const void*>(input_ids_data_ptr)), input_len_bytes,
+                    memory_info, local_input_ids.data(), input_len_bytes,
                     input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
             } else if (name == "attention_mask") {
                 ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
                     memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
                     input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
             } else {
-                 if (num_input_nodes > 2) {
-                    std::cerr << "[Host] WARNING: Ignoring unexpected model input '" << name << "'" << std::endl;
-                    continue;
-                 }
+                 if (num_input_nodes > 2) continue;
                  else throw std::runtime_error("Unexpected model input name: " + name);
             }
             input_tensors.push_back(tensor);
@@ -160,6 +160,7 @@ oe_result_t ocall_onnx_run_inference(
 
         ORT_CHECK(g_ort_api->Run(session, nullptr, input_node_names_ptr.data(), input_tensors.data(), input_tensors.size(), output_node_names, 1, &output_tensor));
 
+        // Process output... (rest of the function is the same)
         OrtTensorTypeAndShapeInfo* output_info;
         ORT_CHECK(g_ort_api->GetTensorTypeAndShape(output_tensor, &output_info));
         size_t output_elements_count;
