@@ -10,15 +10,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
-
-	"github.com/sugarme/tokenizer"
 )
 
-// Global variables
-var tk *tokenizer.Tokenizer
+// Global model config instance
 var modelConfig ModelConfig
-var tokenizerMutex = &sync.Mutex{}
 
 // Struct to parse the model's config.json
 type ModelConfig struct {
@@ -36,19 +31,9 @@ type ResponsePayload struct {
 }
 
 func main() {
-	var err error // Declare err here
+	var err error
 
-	// --- FIX 1: Correctly capture both return values ---
-	tokenizerPath := "./distilbert-sst2-onnx/tokenizer.json"
-	tk = tokenizer.NewTokenizerFromFile(tokenizerPath)
-	// ---
-
-	// Now, this check will work correctly
-	if tk == nil {
-		log.Fatalf("Failed to load tokenizer from '%s': %v", tokenizerPath, err)
-	}
-	log.Println("Tokenizer loaded successfully.")
-
+	// Load the model config at startup (we still need this)
 	configPath := "./distilbert-sst2-onnx/config.json"
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
@@ -60,6 +45,7 @@ func main() {
 	}
 	log.Println("Model config loaded successfully.")
 
+	// Serve the frontend static files and the API endpoint
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
 	http.HandleFunc("/infer", handleInference)
@@ -77,44 +63,48 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenizerMutex.Lock()
-	defer tokenizerMutex.Unlock()
+	// --- 1. Call Python script for tokenization ---
+	tokenizerDir := "./distilbert-sst2-onnx"
+	// Execute `python3 tokenize_script.py <tokenizer_directory>`
+	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
+	// Pass the input text from the UI to the Python script's standard input
+	pyCmd.Stdin = strings.NewReader(payload.Input)
 
-	encoded, err := tk.Encode(tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(payload.Input)), false)
+	var pyStdout, pyStderr bytes.Buffer
+	pyCmd.Stdout = &pyStdout
+	pyCmd.Stderr = &pyStderr
+
+	err := pyCmd.Run()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
+		log.Printf("Python script error: %s", pyStderr.String())
+		http.Error(w, fmt.Sprintf("Tokenization failed: %s", pyStderr.String()), http.StatusInternalServerError)
 		return
 	}
-
-	inputIDs := encoded.GetIds()
-
-	var idStrings []string
-	for _, id := range inputIDs {
-		idStrings = append(idStrings, strconv.Itoa(int(id)))
-	}
-	inputStringForCpp := strings.Join(idStrings, ",")
-
-	hostAppPath := "./ml_host_prod_go"
-	// --- FIX 2: Correct the model path ---
-	modelPath := "./distilbert-sst2-onnx/model.onnx"
+	
+	inputStringForCpp := strings.TrimSpace(pyStdout.String())
 	// ---
+
+	// 2. Execute the C++ host application as a subprocess
+	hostAppPath := "./ml_host_prod_go"
+	modelPath := "./distilbert-sst2-onnx/model.onnx"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
-	cmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
-	cmd.Stdin = strings.NewReader(inputStringForCpp)
+	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
+	cppCmd.Stdin = strings.NewReader(inputStringForCpp)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var cppStdout, cppStderr bytes.Buffer
+	cppCmd.Stdout = &cppStdout
+	cppCmd.Stderr = &cppStderr
 
-	runErr := cmd.Run()
+	runErr := cppCmd.Run()
 	if runErr != nil {
-		log.Printf("Host app stderr: %s", stderr.String())
-		http.Error(w, fmt.Sprintf("Inference failed: %s", stderr.String()), http.StatusInternalServerError)
+		log.Printf("Host app stderr: %s", cppStderr.String())
+		http.Error(w, fmt.Sprintf("Inference failed: %s", cppStderr.String()), http.StatusInternalServerError)
 		return
 	}
 
-	outputParts := strings.Split(strings.TrimSpace(stdout.String()), ",")
+	// 3. Process the output (logits) from the C++ app
+	outputParts := strings.Split(strings.TrimSpace(cppStdout.String()), ",")
 	logits := make([]float32, len(outputParts))
 	for i, part := range outputParts {
 		val, _ := strconv.ParseFloat(strings.TrimSpace(part), 32)
@@ -132,6 +122,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 
 	predictedLabel := modelConfig.ID2Label[strconv.Itoa(predictedIndex)]
 
+	// 4. Send the final, human-readable result to the UI
 	resp := ResponsePayload{
 		InputText:      payload.Input,
 		PredictedLabel: predictedLabel,
