@@ -37,7 +37,6 @@ RUN apt-get update && apt-get install -y \
     libsgx-dcap-ql \
     libsgx-dcap-ql-dev \
     az-dcap-client \
-    open-enclave \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Open Enclave SDK
