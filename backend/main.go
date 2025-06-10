@@ -10,20 +10,15 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync" // <-- 1. IMPORT THE SYNC PACKAGE
+	"sync"
 
 	"github.com/sugarme/tokenizer"
 )
 
-// Global tokenizer and model config instances
+// Global variables
 var tk *tokenizer.Tokenizer
 var modelConfig ModelConfig
-
-// --- FIX STARTS HERE ---
-// 2. Create a Mutex to make the tokenizer safe for concurrent use
 var tokenizerMutex = &sync.Mutex{}
-// --- FIX ENDS HERE ---
-
 
 // Struct to parse the model's config.json
 type ModelConfig struct {
@@ -41,10 +36,15 @@ type ResponsePayload struct {
 }
 
 func main() {
-	var err error
+	var err error // Declare err here
+
+	// --- FIX 1: Correctly capture both return values ---
 	tokenizerPath := "./distilbert-sst2-onnx/tokenizer.json"
 	tk = tokenizer.NewTokenizerFromFile(tokenizerPath)
-	if err != nil {
+	// ---
+
+	// Now, this check will work correctly
+	if tk == nil {
 		log.Fatalf("Failed to load tokenizer from '%s': %v", tokenizerPath, err)
 	}
 	log.Println("Tokenizer loaded successfully.")
@@ -77,19 +77,14 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- FIX STARTS HERE ---
-	// 3. Lock the mutex before using the tokenizer
 	tokenizerMutex.Lock()
-	// Use defer to ensure the mutex is always unlocked, even if a panic occurs
 	defer tokenizerMutex.Unlock()
-	
-	// Tokenize the input text into integer IDs
+
 	encoded, err := tk.Encode(tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(payload.Input)), false)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
 		return
 	}
-	// --- FIX ENDS HERE ---
 
 	inputIDs := encoded.GetIds()
 
@@ -100,7 +95,9 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	inputStringForCpp := strings.Join(idStrings, ",")
 
 	hostAppPath := "./ml_host_prod_go"
-	modelPath := "./model/model.onnx"
+	// --- FIX 2: Correct the model path ---
+	modelPath := "./distilbert-sst2-onnx/model.onnx"
+	// ---
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	cmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
@@ -140,5 +137,5 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		PredictedLabel: predictedLabel,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(&resp)
 }
