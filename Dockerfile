@@ -116,7 +116,10 @@ RUN apt-get update && apt-get install -y \
     libsgx-dcap-ql \
     libsgx-dcap-ql-dev \
     az-dcap-client \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ubuntu_2004_open-enclave_0.19.0_amd64.deb && \
     apt-get install -y ./Ubuntu_2004_open-enclave_0.19.0_amd64.deb
 
