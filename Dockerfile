@@ -14,8 +14,16 @@ RUN apt-get update && apt-get install -y \
     pkg-config
 
 # Install Open Enclave SDK
-RUN wget https://github.com/openenclave/openenclave/releases/download/v0.17.4/open-enclave-0.17.4-linux-x64.deb && \
-    apt-get install -y ./open-enclave-0.17.4-linux-x64.deb
+RUN git clone -b v0.19.0 --recursive --depth 1 https://github.com/openenclave/openenclave && \
+    cd openenclave && \
+    mkdir build && cd build && \
+    cmake -GNinja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/opt/openenclave -DHAS_QUOTE_PROVIDER=OFF -DENABLE_REFMAN=OFF .. && \
+    cmake --build . --target install && \
+    echo "source /opt/openenclave/share/openenclave/openenclaverc" >> ~/.bashrc && \
+    source /opt/openenclave/share/openenclave/openenclaverc
+
+# RUN wget https://github.com/openenclave/openenclave/releases/download/v0.17.4/open-enclave-0.17.4-linux-x64.deb && \
+#     apt-get install -y ./open-enclave-0.17.4-linux-x64.deb
 # Activate OE - Note: This only affects this RUN command, not subsequent ones.
 # The sourcing is correctly done in the build step below.
 
@@ -30,7 +38,10 @@ WORKDIR /app
 
 # Build the C++ application
 # Note: The WORKDIR is /app, so we cd into build from there.
-RUN cd build && \
+RUN rm -rf build && mkdir build && cd build && \
+    oeedger8r --trusted common/enclave.edl --trusted-dir build/edl_generated --search-path /opt/openenclave/include && \
+    oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated --search-path /opt/openenclave/include && \
+    cd build && \
     . /opt/openenclave/share/openenclave/openenclaverc && \
     cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime && \
     make
