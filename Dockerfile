@@ -24,6 +24,8 @@ RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" | tee /et
 RUN echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | tee /etc/apt/sources.list.d/msprod.list \
     && wget -qO - https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 
+# Set the DEBIAN_FRONTEND variable to noninteractive to bypass prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
     # Now install the actual packages
 RUN apt-get update && apt-get install -y \
@@ -98,6 +100,9 @@ RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" | tee /et
 
 RUN echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | tee /etc/apt/sources.list.d/msprod.list \
     && wget -qO - https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+ # Set the DEBIAN_FRONTEND variable to noninteractive to bypass prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Now install the actual packages
 RUN apt-get update && apt-get install -y \
