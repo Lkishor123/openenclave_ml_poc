@@ -29,7 +29,7 @@ COPY . /app
 WORKDIR /app
 
 # Build the C++ application
-RUN mkdir build && cd build && \
+RUN cd build && \
     . /opt/openenclave/share/openenclave/openenclaverc && \
     cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime && \
     make
