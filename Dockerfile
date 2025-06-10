@@ -41,8 +41,8 @@ FROM golang:1.18-alpine AS go-builder
 WORKDIR /app
 # Copy go.mod and go.sum first to leverage Docker layer caching
 COPY backend/go.mod ./
-RUN go mod download
 COPY backend/main.go .
+RUN go mod tidy
 RUN go build -o /main .
 
 # Stage 3: Final Production Image
