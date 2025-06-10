@@ -14,6 +14,17 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     ninja-build
 
+# Install runtime dependencies without sudo
+RUN echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main' | tee /etc/apt/sources.list.d/intel-sgx.list \
+    && wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
+
+RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" | tee /etc/apt/sources.list.d/llvm-toolchain-focal-11.list \
+    && wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+
+RUN echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | tee /etc/apt/sources.list.d/msprod.list \
+    && wget -qO - https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+
     # Now install the actual packages
 RUN apt-get update && apt-get install -y \
     dkms \
