@@ -1,4 +1,4 @@
-/* host/host.cpp - FINAL VERSION WITH MEMORY LIFETIME FIX */
+/* host/host.cpp - FINAL AND COMPLETE VERSION */
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -39,6 +39,7 @@ static const OrtApi* g_ort_api = nullptr;
             throw std::runtime_error(std::string("ONNX Runtime failed: ") + msg); \
         } \
     } while (0)
+
 
 // --- Host-side ONNX Runtime Globals ---
 static OrtEnv* g_host_ort_env = nullptr;
@@ -86,7 +87,6 @@ oe_result_t ocall_onnx_load_model(
     return OE_OK;
 }
 
-// THIS OCALL IS MODIFIED WITH THE MEMORY LIFETIME FIX
 oe_result_t ocall_onnx_run_inference(
     uint64_t host_session_handle,
     const void* input_data_from_enclave,
@@ -96,8 +96,7 @@ oe_result_t ocall_onnx_run_inference(
     size_t* actual_output_len_bytes_out) {
 
     OrtMemoryInfo* memory_info = nullptr;
-    OrtValue* input_ids_tensor = nullptr;
-    OrtValue* attention_mask_tensor = nullptr;
+    std::vector<OrtValue*> input_tensors;
     OrtValue* output_tensor = nullptr;
 
     try {
@@ -112,21 +111,17 @@ oe_result_t ocall_onnx_run_inference(
 
         size_t num_input_nodes;
         ORT_CHECK(g_ort_api->SessionGetInputCount(session, &num_input_nodes));
-        if (num_input_nodes != 2) {
-             std::cerr << "[Host] ERROR: This BERT model handler expects 2 inputs (input_ids, attention_mask)." << std::endl;
-             return OE_INVALID_PARAMETER;
-        }
 
-        std::vector<std::string> input_names_str;
-        std::vector<const char*> input_names_ptr;
+        std::vector<std::string> input_node_names_str;
+        std::vector<const char*> input_node_names_ptr;
         for (size_t i = 0; i < num_input_nodes; ++i) {
             char* name_ptr;
             ORT_CHECK(g_ort_api->SessionGetInputName(session, i, allocator, &name_ptr));
-            input_names_str.push_back(name_ptr);
+            input_node_names_str.push_back(name_ptr);
             allocator->Free(allocator, name_ptr);
         }
-        for (const auto& name : input_names_str) {
-            input_names_ptr.push_back(name.c_str());
+        for (const auto& name : input_node_names_str) {
+            input_node_names_ptr.push_back(name.c_str());
         }
 
         std::string output_name_str;
@@ -137,24 +132,33 @@ oe_result_t ocall_onnx_run_inference(
         const char* output_node_names[] = {output_name_str.c_str()};
         
         size_t num_tokens = input_len_bytes / sizeof(int64_t);
-        std::vector<int64_t> input_ids_shape = {1, (int64_t)num_tokens};
+        const int64_t* input_ids_data_ptr = static_cast<const int64_t*>(input_data_from_enclave);
+        std::vector<int64_t> attention_mask_data(num_tokens, 1);
+        std::vector<int64_t> input_shape = {1, (int64_t)num_tokens};
         
         ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
         
-        ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
-            memory_info, const_cast<void*>(input_data_from_enclave), input_len_bytes,
-            input_ids_shape.data(), input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
-            &input_ids_tensor));
+        for (const auto& name : input_node_names_str) {
+            OrtValue* tensor = nullptr;
+            if (name == "input_ids") {
+                ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
+                    memory_info, const_cast<void*>(static_cast<const void*>(input_ids_data_ptr)), input_len_bytes,
+                    input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
+            } else if (name == "attention_mask") {
+                ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
+                    memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
+                    input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
+            } else {
+                 if (num_input_nodes > 2) {
+                    std::cerr << "[Host] WARNING: Ignoring unexpected model input '" << name << "'" << std::endl;
+                    continue;
+                 }
+                 else throw std::runtime_error("Unexpected model input name: " + name);
+            }
+            input_tensors.push_back(tensor);
+        }
 
-        std::vector<int64_t> attention_mask_data(num_tokens, 1);
-        ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
-            memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
-            input_ids_shape.data(), input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
-            &attention_mask_tensor));
-            
-        std::vector<OrtValue*> input_tensors = {input_ids_tensor, attention_mask_tensor};
-
-        ORT_CHECK(g_ort_api->Run(session, nullptr, input_names_ptr.data(), input_tensors.data(), input_tensors.size(), output_node_names, 1, &output_tensor));
+        ORT_CHECK(g_ort_api->Run(session, nullptr, input_node_names_ptr.data(), input_tensors.data(), input_tensors.size(), output_node_names, 1, &output_tensor));
 
         OrtTensorTypeAndShapeInfo* output_info;
         ORT_CHECK(g_ort_api->GetTensorTypeAndShape(output_tensor, &output_info));
@@ -166,10 +170,9 @@ oe_result_t ocall_onnx_run_inference(
         if (actual_output_len_bytes_out) *actual_output_len_bytes_out = required_output_bytes;
 
         if (required_output_bytes > output_buf_len_bytes) {
-            g_ort_api->ReleaseValue(output_tensor);
-            g_ort_api->ReleaseValue(input_ids_tensor);
-            g_ort_api->ReleaseValue(attention_mask_tensor);
-            g_ort_api->ReleaseMemoryInfo(memory_info);
+            for(auto t : input_tensors) if (t) g_ort_api->ReleaseValue(t);
+            if (output_tensor) g_ort_api->ReleaseValue(output_tensor);
+            if (memory_info) g_ort_api->ReleaseMemoryInfo(memory_info);
             return OE_BUFFER_TOO_SMALL;
         }
 
@@ -179,18 +182,14 @@ oe_result_t ocall_onnx_run_inference(
         
     } catch (const std::exception& e) {
         std::cerr << "[Host] Exception in ocall_onnx_run_inference: " << e.what() << std::endl;
-        // Release any resources that were successfully allocated before the exception
+        for(auto t : input_tensors) if (t) g_ort_api->ReleaseValue(t);
         if (output_tensor) g_ort_api->ReleaseValue(output_tensor);
-        if (input_ids_tensor) g_ort_api->ReleaseValue(input_ids_tensor);
-        if (attention_mask_tensor) g_ort_api->ReleaseValue(attention_mask_tensor);
         if (memory_info) g_ort_api->ReleaseMemoryInfo(memory_info);
         return OE_FAILURE;
     }
 
-    // --- FIX: Release all resources at the end of a successful run ---
+    for(auto t : input_tensors) g_ort_api->ReleaseValue(t);
     g_ort_api->ReleaseValue(output_tensor);
-    g_ort_api->ReleaseValue(input_ids_tensor);
-    g_ort_api->ReleaseValue(attention_mask_tensor);
     g_ort_api->ReleaseMemoryInfo(memory_info);
 
     return OE_OK;
