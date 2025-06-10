@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <numeric>
+#include <sstream>
 
 // Open Enclave API
 #include <openenclave/host.h>
@@ -234,11 +235,94 @@ oe_result_t ocall_onnx_release_session(uint64_t host_session_handle) {
     return OE_NOT_FOUND;
 }
 
-// The main function can be modified to accept the --use-stdin flag
-// as discussed in the previous step, or removed if you only use
-// this as a library called by the Go backend.
 int main(int argc, char* argv[]) {
-    // ... For testing, the original main function can be kept.
-    // For production, this will not be the main entry point.
-    return 0;
+    oe_result_t oe_host_result;
+    oe_enclave_t* enclave = nullptr;
+    int host_app_ret_val = 1;
+    uint64_t enclave_ml_session_handle = 0;
+
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <path_to_model.onnx> <path_to_enclave.signed.so> [--use-stdin] [--simulate]" << std::endl;
+        return 1;
+    }
+
+    const std::string model_filepath = argv[1];
+    const std::string enclave_filepath = argv[2];
+    bool use_stdin = false;
+    bool simulate = false;
+
+    for (int i = 3; i < argc; ++i) {
+        if (std::string(argv[i]) == "--use-stdin") {
+            use_stdin = true;
+        } else if (std::string(argv[i]) == "--simulate") {
+            simulate = true;
+        }
+    }
+
+    g_ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+    ORT_CHECK(g_ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "host_app_ort_env", &g_host_ort_env));
+
+    try {
+        uint32_t enclave_flags = OE_ENCLAVE_FLAG_DEBUG;
+        if (simulate) {
+            enclave_flags |= OE_ENCLAVE_FLAG_SIMULATE;
+        }
+
+        oe_host_result = oe_create_enclave_enclave(
+            enclave_filepath.c_str(), OE_ENCLAVE_TYPE_AUTO,
+            enclave_flags, nullptr, 0, &enclave);
+        OE_HOST_CHECK(oe_host_result, "oe_create_enclave_enclave");
+
+        std::vector<unsigned char> model_buffer = load_file_to_buffer(model_filepath);
+        oe_result_t ecall_ret_status;
+        oe_host_result = initialize_enclave_ml_context(
+            enclave, &ecall_ret_status, model_buffer.data(),
+            model_buffer.size(), &enclave_ml_session_handle);
+        OE_HOST_CHECK(oe_host_result, "initialize_enclave_ml_context (host call)");
+        OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave execution)");
+
+        std::vector<float> input_tensor_values;
+        if (use_stdin) {
+            std::string line;
+            std::getline(std::cin, line);
+            std::stringstream ss(line);
+            std::string value_str;
+            while(std::getline(ss, value_str, ',')) {
+                input_tensor_values.push_back(std::stof(value_str));
+            }
+        } else {
+            // Default values if not using stdin, for direct testing
+            input_tensor_values = {3.14f, -2.71f};
+        }
+
+        size_t input_data_byte_size = input_tensor_values.size() * sizeof(float);
+        std::vector<float> output_tensor_values(20); // A reasonably sized output buffer
+        size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
+        size_t actual_output_byte_size = 0;
+
+        oe_host_result = enclave_infer(
+            enclave, &ecall_ret_status, enclave_ml_session_handle,
+            input_tensor_values.data(), input_data_byte_size,
+            output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size);
+        OE_HOST_CHECK(oe_host_result, "enclave_infer (host call)");
+        OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave execution)");
+
+        // Print final output to stdout for the Go backend to capture
+        size_t output_elements = actual_output_byte_size / sizeof(float);
+        for (size_t i = 0; i < output_elements; ++i) {
+            std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
+        }
+        std::cout << std::endl;
+
+        terminate_enclave_ml_context(enclave, &ecall_ret_status, enclave_ml_session_handle);
+        host_app_ret_val = 0;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[Host] Critical Error: " << e.what() << std::endl;
+        host_app_ret_val = 1;
+    }
+
+    if (enclave) oe_terminate_enclave(enclave);
+    if (g_host_ort_env) g_ort_api->ReleaseEnv(g_host_ort_env);
+    return host_app_ret_val;
 }

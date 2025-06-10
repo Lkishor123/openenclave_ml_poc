@@ -18,3 +18,12 @@ cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime -DCMAKE_BUILD_TYPE=Debug
 
 make
 make run
+
+
+## Docker Build:
+docker build -t confidential-ml-app .
+docker run --rm -p 8080:8080 --device /dev/sgx_enclave confidential-ml-app
+
+## For Simulation Mode:
+# This requires modifying backend/main.go to pass the --simulate flag
+docker run --rm -p 8080:8080 confidential-ml-app
