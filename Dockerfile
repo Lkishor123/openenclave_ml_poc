@@ -57,7 +57,7 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # The sourcing is correctly done in the build step below.
 
 # Install ONNX Runtime
-RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.10.0/onnxruntime-linux-x64-1.19.0.tgz && \
+RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.19.0/onnxruntime-linux-x64-1.19.0.tgz && \
     tar -zxvf onnxruntime-linux-x64-1.19.0.tgz -C /opt && \
     mv /opt/onnxruntime-linux-x64-1.19.0 /opt/onnxruntime
 
