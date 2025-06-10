@@ -120,6 +120,14 @@ RUN apt-get update && apt-get install -y \
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ubuntu_2004_open-enclave_0.19.0_amd64.deb && \
     apt-get install -y ./Ubuntu_2004_open-enclave_0.19.0_amd64.deb
 
+# --- FIX STARTS HERE ---
+# 1. Copy the ONNX Runtime shared libraries from the builder stage
+COPY --from=builder /opt/onnxruntime/lib/libonnxruntime.so* /usr/lib/
+
+# 2. Update the dynamic linker cache to recognize the new libraries
+RUN ldconfig
+# --- FIX ENDS HERE ---
+
 WORKDIR /app
 
 # Copy built artifacts from previous stages
