@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync" // <-- 1. IMPORT THE SYNC PACKAGE
 
 	"github.com/sugarme/tokenizer"
 )
@@ -17,6 +18,12 @@ import (
 // Global tokenizer and model config instances
 var tk *tokenizer.Tokenizer
 var modelConfig ModelConfig
+
+// --- FIX STARTS HERE ---
+// 2. Create a Mutex to make the tokenizer safe for concurrent use
+var tokenizerMutex = &sync.Mutex{}
+// --- FIX ENDS HERE ---
+
 
 // Struct to parse the model's config.json
 type ModelConfig struct {
@@ -35,10 +42,7 @@ type ResponsePayload struct {
 
 func main() {
 	var err error
-	// Load the tokenizer and model config at startup
 	tokenizerPath := "./distilbert-sst2-onnx/tokenizer.json"
-	
-    // FIX 1: The function is NewTokenizerFromFile, not FromFile.
 	tk = tokenizer.NewTokenizerFromFile(tokenizerPath)
 	if err != nil {
 		log.Fatalf("Failed to load tokenizer from '%s': %v", tokenizerPath, err)
@@ -56,7 +60,6 @@ func main() {
 	}
 	log.Println("Model config loaded successfully.")
 
-	// Serve the frontend static files and the API endpoint
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
 	http.HandleFunc("/infer", handleInference)
@@ -74,26 +77,30 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Tokenize the input text into integer IDs
+	// --- FIX STARTS HERE ---
+	// 3. Lock the mutex before using the tokenizer
+	tokenizerMutex.Lock()
+	// Use defer to ensure the mutex is always unlocked, even if a panic occurs
+	defer tokenizerMutex.Unlock()
+	
+	// Tokenize the input text into integer IDs
 	encoded, err := tk.Encode(tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(payload.Input)), false)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
 		return
 	}
-    
-    // FIX 2: The method name is GetIds, not GetIDs (lowercase 'd').
+	// --- FIX ENDS HERE ---
+
 	inputIDs := encoded.GetIds()
 
-	// Convert the integer IDs to a comma-separated string for the C++ app
 	var idStrings []string
 	for _, id := range inputIDs {
 		idStrings = append(idStrings, strconv.Itoa(int(id)))
 	}
 	inputStringForCpp := strings.Join(idStrings, ",")
 
-	// 2. Execute the C++ host application as a subprocess
 	hostAppPath := "./ml_host_prod_go"
-	modelPath := "./distilbert-sst2-onnx/model.onnx"
+	modelPath := "./model/model.onnx"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	cmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
@@ -103,14 +110,13 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err = cmd.Run()
-	if err != nil {
+	runErr := cmd.Run()
+	if runErr != nil {
 		log.Printf("Host app stderr: %s", stderr.String())
 		http.Error(w, fmt.Sprintf("Inference failed: %s", stderr.String()), http.StatusInternalServerError)
 		return
 	}
 
-	// 3. Process the output (logits) from the C++ app
 	outputParts := strings.Split(strings.TrimSpace(stdout.String()), ",")
 	logits := make([]float32, len(outputParts))
 	for i, part := range outputParts {
@@ -118,7 +124,6 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		logits[i] = float32(val)
 	}
 
-	// Find the highest score to determine the prediction
 	var maxLogit float32 = -1e9
 	var predictedIndex int = 0
 	for i, logit := range logits {
@@ -128,10 +133,8 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Map the predicted index to its label (e.g., "POSITIVE")
 	predictedLabel := modelConfig.ID2Label[strconv.Itoa(predictedIndex)]
 
-	// 4. Send the final, human-readable result to the UI
 	resp := ResponsePayload{
 		InputText:      payload.Input,
 		PredictedLabel: predictedLabel,
