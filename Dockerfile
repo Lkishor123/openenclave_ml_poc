@@ -35,8 +35,9 @@ RUN apt-get update && apt-get install -y \
     libsgx-quote-ex \
     libprotobuf17 \
     libsgx-dcap-ql \
-    libsgx-dcap-ql-dev \
-    az-dcap-client \
+    libsgx-dcap-ql-dev
+
+RUN apt-get az-dcap-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Open Enclave SDK
