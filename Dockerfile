@@ -133,7 +133,9 @@ WORKDIR /app
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/model/simple_model.onnx ./model/simple_model.onnx
+COPY --from=builder /app/model/model.onnx ./model/model.onnx
+COPY --from=builder /app/distilbert-sst2-onnx ./distilbert-sst2-onnx
+
 COPY --from=go-builder /main ./main
 COPY frontend ./frontend
 

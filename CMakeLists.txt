@@ -147,9 +147,9 @@ add_subdirectory(enclave)
 add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
-set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/simple_model.onnx) 
+set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/model.onnx) 
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
-set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/simple_model.onnx) 
+set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/model.onnx) 
 
 if(EXISTS ${MODEL_SOURCE_PATH})
     add_custom_command(
