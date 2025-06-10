@@ -1,4 +1,4 @@
-/* host/host.cpp - FINAL VERSION FOR BERT MODEL */
+/* host/host.cpp - FINAL VERSION FOR BERT (WITH ATTENTION MASK) */
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -40,31 +40,12 @@ static const OrtApi* g_ort_api = nullptr;
         } \
     } while (0)
 
-
-// --- Host-side ONNX Runtime Globals ---
+// --- Host-side ONNX Runtime Globals (and other functions from before) ---
 static OrtEnv* g_host_ort_env = nullptr;
 static std::map<uint64_t, OrtSession*> g_host_onnx_sessions;
 static uint64_t g_next_host_session_handle = 1;
 
-// --- File Loading ---
-std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
-    if (!std::filesystem::exists(filepath)) {
-        throw std::runtime_error("[Host] File not found: " + filepath);
-    }
-    std::ifstream file(filepath, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        throw std::runtime_error("[Host] Failed to open file: " + filepath);
-    }
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::vector<unsigned char> buffer(static_cast<size_t>(size));
-    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
-        throw std::runtime_error("[Host] Failed to read file into buffer: " + filepath);
-    }
-    return buffer;
-}
-
-// Helper to release ONNX C-style strings safely
+std::vector<unsigned char> load_file_to_buffer(const std::string& filepath);
 struct OrtStringReleaser {
     OrtAllocator* allocator;
     char* str;
@@ -100,7 +81,7 @@ oe_result_t ocall_onnx_load_model(
     return OE_OK;
 }
 
-// THIS OCALL IS MODIFIED FOR INT64 INPUT
+// --- OCALL to run inference (MODIFIED TO HANDLE ATTENTION MASK) ---
 oe_result_t ocall_onnx_run_inference(
     uint64_t host_session_handle,
     const void* input_data_from_enclave,
@@ -119,48 +100,65 @@ oe_result_t ocall_onnx_run_inference(
         OrtAllocator* allocator;
         ORT_CHECK(g_ort_api->GetAllocatorWithDefaultOptions(&allocator));
 
-        char* input_name_ptr;
-        ORT_CHECK(g_ort_api->SessionGetInputName(session, 0, allocator, &input_name_ptr));
-        OrtStringReleaser input_name_releaser(allocator, input_name_ptr);
-        const char* input_node_names[] = {input_name_ptr};
+        // --- NEW: Handle multiple inputs ---
+        size_t num_input_nodes;
+        ORT_CHECK(g_ort_api->SessionGetInputCount(session, &num_input_nodes));
+        if (num_input_nodes != 2) {
+             std::cerr << "[Host] ERROR: This BERT model handler expects 2 inputs (input_ids, attention_mask)." << std::endl;
+             return OE_INVALID_PARAMETER;
+        }
 
+        // Get names for all inputs
+        char* input_name_0_ptr;
+        ORT_CHECK(g_ort_api->SessionGetInputName(session, 0, allocator, &input_name_0_ptr));
+        OrtStringReleaser input_name_releaser_0(allocator, input_name_0_ptr);
+        
+        char* input_name_1_ptr;
+        ORT_CHECK(g_ort_api->SessionGetInputName(session, 1, allocator, &input_name_1_ptr));
+        OrtStringReleaser input_name_releaser_1(allocator, input_name_1_ptr);
+        
+        std::vector<const char*> input_node_names = {input_name_0_ptr, input_name_1_ptr};
+
+        // Get output name
         char* output_name_ptr;
         ORT_CHECK(g_ort_api->SessionGetOutputName(session, 0, allocator, &output_name_ptr));
         OrtStringReleaser output_name_releaser(allocator, output_name_ptr);
         const char* output_node_names[] = {output_name_ptr};
-
-        OrtTypeInfo* type_info;
-        ORT_CHECK(g_ort_api->SessionGetInputTypeInfo(session, 0, &type_info));
-        const OrtTensorTypeAndShapeInfo* tensor_info;
-        ORT_CHECK(g_ort_api->CastTypeInfoToTensorInfo(type_info, &tensor_info));
-
-        size_t num_dims;
-        ORT_CHECK(g_ort_api->GetDimensionsCount(tensor_info, &num_dims));
-        std::vector<int64_t> input_node_dims(num_dims);
-        ORT_CHECK(g_ort_api->GetDimensions(tensor_info, input_node_dims.data(), num_dims));
-        g_ort_api->ReleaseTypeInfo(type_info);
-
-        // For BERT, the input is typically [batch_size, sequence_length]
-        // We assume a batch size of 1.
-        input_node_dims[0] = 1;
-        input_node_dims[1] = input_len_bytes / sizeof(int64_t);
-
+        
+        // --- 1. Prepare the 'input_ids' tensor (from the enclave) ---
+        size_t num_tokens = input_len_bytes / sizeof(int64_t);
+        std::vector<int64_t> input_ids_shape = {1, (int64_t)num_tokens}; // Shape is [batch_size, sequence_length]
+        
         OrtMemoryInfo* memory_info;
         ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
         
-        OrtValue* input_tensor = nullptr;
-        // CHANGED FOR BERT: Use ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64
+        OrtValue* input_ids_tensor = nullptr;
         ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
             memory_info, const_cast<void*>(input_data_from_enclave), input_len_bytes,
-            input_node_dims.data(), input_node_dims.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
-            &input_tensor));
+            input_ids_shape.data(), input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+            &input_ids_tensor));
 
+        // --- 2. Create the 'attention_mask' tensor (on the fly) ---
+        // For a single sentence, the mask is just all 1s.
+        std::vector<int64_t> attention_mask_data(num_tokens, 1);
+        OrtValue* attention_mask_tensor = nullptr;
+        ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
+            memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
+            input_ids_shape.data(), input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+            &attention_mask_tensor));
+            
         g_ort_api->ReleaseMemoryInfo(memory_info);
 
+        // --- 3. Run inference with BOTH tensors ---
+        std::vector<OrtValue*> input_tensors = {input_ids_tensor, attention_mask_tensor};
         OrtValue* output_tensor = nullptr;
-        ORT_CHECK(g_ort_api->Run(session, nullptr, input_node_names, (const OrtValue* const*)&input_tensor, 1, output_node_names, 1, &output_tensor));
-        g_ort_api->ReleaseValue(input_tensor);
 
+        ORT_CHECK(g_ort_api->Run(session, nullptr, input_node_names.data(), input_tensors.data(), input_tensors.size(), output_node_names, 1, &output_tensor));
+        
+        g_ort_api->ReleaseValue(input_ids_tensor);
+        g_ort_api->ReleaseValue(attention_mask_tensor);
+
+        // --- Process output (this part remains the same) ---
         OrtTensorTypeAndShapeInfo* output_info;
         ORT_CHECK(g_ort_api->GetTensorTypeAndShape(output_tensor, &output_info));
 
@@ -168,7 +166,6 @@ oe_result_t ocall_onnx_run_inference(
         ORT_CHECK(g_ort_api->GetTensorShapeElementCount(output_info, &output_elements_count));
         g_ort_api->ReleaseTensorTypeAndShapeInfo(output_info);
 
-        // The output (logits) is float, so this part is correct
         size_t required_output_bytes = output_elements_count * sizeof(float);
         if (actual_output_len_bytes_out) *actual_output_len_bytes_out = required_output_bytes;
 
