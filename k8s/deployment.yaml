@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: confidential-ml-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: confidential-ml
+  template:
+    metadata:
+      labels:
+        app: confidential-ml
+    spec:
+      containers:
+      - name: ml-app-container
+        image: your-acr-registry.azurecr.io/confidential-ml:latest # <-- IMPORTANT: CHANGE THIS
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            sgx.intel.com/epc: "512Mi" # SGX Enclave Page Cache memory
+          requests:
+            sgx.intel.com/epc: "512Mi"
+        volumeMounts:
+        - name: sgx-device
+          mountPath: /dev/sgx_enclave
+      volumes:
+      - name: sgx-device
+        hostPath:
+          path: /dev/sgx_enclave
+      nodeSelector:
+        agentpool: sgxpool # Ensure you have an SGX-enabled node pool in AKS
