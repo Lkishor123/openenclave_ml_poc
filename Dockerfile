@@ -14,6 +14,21 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     ninja-build
 
+    # Now install the actual packages
+RUN apt-get update && apt-get install -y \
+    dkms \
+    clang-11 \
+    libssl-dev \
+    gdb \
+    libsgx-enclave-common \
+    libsgx-quote-ex \
+    libprotobuf17 \
+    libsgx-dcap-ql \
+    libsgx-dcap-ql-dev \
+    az-dcap-client \
+    open-enclave \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Open Enclave SDK
 # RUN git clone -b v0.19.0 --recursive --depth 1 https://github.com/openenclave/openenclave && \
 #     cd openenclave && \
