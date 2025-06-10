@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
 # Install Open Enclave SDK
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.17.4/open-enclave-0.17.4-linux-x64.deb && \
     apt-get install -y ./open-enclave-0.17.4-linux-x64.deb
-# Activate OE
-RUN . /opt/openenclave/share/openenclave/openenclaverc
+# Activate OE - Note: This only affects this RUN command, not subsequent ones.
+# The sourcing is correctly done in the build step below.
 
 # Install ONNX Runtime
 RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.10.0/onnxruntime-linux-x64-1.10.0.tgz && \
@@ -29,6 +29,7 @@ COPY . /app
 WORKDIR /app
 
 # Build the C++ application
+# Note: The WORKDIR is /app, so we cd into build from there.
 RUN cd build && \
     . /opt/openenclave/share/openenclave/openenclaverc && \
     cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime && \
@@ -38,6 +39,7 @@ RUN cd build && \
 FROM golang:1.18-alpine AS go-builder
 
 WORKDIR /app
+# Copy go.mod and go.sum first to leverage Docker layer caching
 COPY backend/go.mod ./
 RUN go mod download
 COPY backend/main.go .
@@ -46,21 +48,33 @@ RUN go build -o /main .
 # Stage 3: Final Production Image
 FROM ubuntu:20.04
 
-# Install only runtime dependencies
-RUN echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main' | sudo tee /etc/apt/sources.list.d/intel-sgx.list \
-    && wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | sudo apt-key add -
+# Install sudo and wget first, as they are used in subsequent commands
+RUN apt-get update && apt-get install -y sudo wget gnupg
 
-RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain-focal-11.list \
-    && wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+# Install runtime dependencies without sudo
+RUN echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main' | tee /etc/apt/sources.list.d/intel-sgx.list \
+    && wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
 
-RUN echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | sudo tee /etc/apt/sources.list.d/msprod.list \
-    && wget -qO - https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" | tee /etc/apt/sources.list.d/llvm-toolchain-focal-11.list \
+    && wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 
-RUN apt-get update && apt -y install dkms install clang-11 libssl-dev \
-    gdb libsgx-enclave-common libsgx-quote-ex libprotobuf17 libsgx-dcap-ql libsgx-dcap-ql-dev \
-    az-dcap-client open-enclave
+RUN echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | tee /etc/apt/sources.list.d/msprod.list \
+    && wget -qO - https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 
-RUN rm -rf /var/lib/apt/lists/*
+# Now install the actual packages
+RUN apt-get update && apt-get install -y \
+    dkms \
+    clang-11 \
+    libssl-dev \
+    gdb \
+    libsgx-enclave-common \
+    libsgx-quote-ex \
+    libprotobuf17 \
+    libsgx-dcap-ql \
+    libsgx-dcap-ql-dev \
+    az-dcap-client \
+    open-enclave \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
