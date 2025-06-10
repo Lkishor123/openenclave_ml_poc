@@ -1,4 +1,4 @@
-/* host/host.cpp - FINAL VERSION FOR BERT (WITH ATTENTION MASK) */
+/* host/host.cpp - FINAL AND COMPLETE VERSION */
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -40,12 +40,31 @@ static const OrtApi* g_ort_api = nullptr;
         } \
     } while (0)
 
-// --- Host-side ONNX Runtime Globals (and other functions from before) ---
+
+// --- Host-side ONNX Runtime Globals ---
 static OrtEnv* g_host_ort_env = nullptr;
 static std::map<uint64_t, OrtSession*> g_host_onnx_sessions;
 static uint64_t g_next_host_session_handle = 1;
 
-std::vector<unsigned char> load_file_to_buffer(const std::string& filepath);
+// --- FIX: Add the missing function implementation ---
+std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
+    if (!std::filesystem::exists(filepath)) {
+        throw std::runtime_error("[Host] File not found: " + filepath);
+    }
+    std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        throw std::runtime_error("[Host] Failed to open file: " + filepath);
+    }
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<unsigned char> buffer(static_cast<size_t>(size));
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        throw std::runtime_error("[Host] Failed to read file into buffer: " + filepath);
+    }
+    return buffer;
+}
+// --- END FIX ---
+
 struct OrtStringReleaser {
     OrtAllocator* allocator;
     char* str;
@@ -63,7 +82,6 @@ oe_result_t ocall_onnx_load_model(
     const unsigned char* model_data,
     size_t model_data_len) {
     try {
-        // ... (This function is generic and does not need changes) ...
         if (!g_ort_api || !g_host_ort_env || !host_session_handle_out || !model_data || model_data_len == 0) return OE_INVALID_PARAMETER;
         *host_session_handle_out = 0;
         OrtSessionOptions* session_options = nullptr;
@@ -81,7 +99,6 @@ oe_result_t ocall_onnx_load_model(
     return OE_OK;
 }
 
-// --- OCALL to run inference (MODIFIED TO HANDLE ATTENTION MASK) ---
 oe_result_t ocall_onnx_run_inference(
     uint64_t host_session_handle,
     const void* input_data_from_enclave,
@@ -100,7 +117,6 @@ oe_result_t ocall_onnx_run_inference(
         OrtAllocator* allocator;
         ORT_CHECK(g_ort_api->GetAllocatorWithDefaultOptions(&allocator));
 
-        // --- NEW: Handle multiple inputs ---
         size_t num_input_nodes;
         ORT_CHECK(g_ort_api->SessionGetInputCount(session, &num_input_nodes));
         if (num_input_nodes != 2) {
@@ -108,7 +124,6 @@ oe_result_t ocall_onnx_run_inference(
              return OE_INVALID_PARAMETER;
         }
 
-        // Get names for all inputs
         char* input_name_0_ptr;
         ORT_CHECK(g_ort_api->SessionGetInputName(session, 0, allocator, &input_name_0_ptr));
         OrtStringReleaser input_name_releaser_0(allocator, input_name_0_ptr);
@@ -119,15 +134,13 @@ oe_result_t ocall_onnx_run_inference(
         
         std::vector<const char*> input_node_names = {input_name_0_ptr, input_name_1_ptr};
 
-        // Get output name
         char* output_name_ptr;
         ORT_CHECK(g_ort_api->SessionGetOutputName(session, 0, allocator, &output_name_ptr));
         OrtStringReleaser output_name_releaser(allocator, output_name_ptr);
         const char* output_node_names[] = {output_name_ptr};
         
-        // --- 1. Prepare the 'input_ids' tensor (from the enclave) ---
         size_t num_tokens = input_len_bytes / sizeof(int64_t);
-        std::vector<int64_t> input_ids_shape = {1, (int64_t)num_tokens}; // Shape is [batch_size, sequence_length]
+        std::vector<int64_t> input_ids_shape = {1, (int64_t)num_tokens};
         
         OrtMemoryInfo* memory_info;
         ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
@@ -138,8 +151,6 @@ oe_result_t ocall_onnx_run_inference(
             input_ids_shape.data(), input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
             &input_ids_tensor));
 
-        // --- 2. Create the 'attention_mask' tensor (on the fly) ---
-        // For a single sentence, the mask is just all 1s.
         std::vector<int64_t> attention_mask_data(num_tokens, 1);
         OrtValue* attention_mask_tensor = nullptr;
         ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
@@ -149,7 +160,6 @@ oe_result_t ocall_onnx_run_inference(
             
         g_ort_api->ReleaseMemoryInfo(memory_info);
 
-        // --- 3. Run inference with BOTH tensors ---
         std::vector<OrtValue*> input_tensors = {input_ids_tensor, attention_mask_tensor};
         OrtValue* output_tensor = nullptr;
 
@@ -158,7 +168,6 @@ oe_result_t ocall_onnx_run_inference(
         g_ort_api->ReleaseValue(input_ids_tensor);
         g_ort_api->ReleaseValue(attention_mask_tensor);
 
-        // --- Process output (this part remains the same) ---
         OrtTensorTypeAndShapeInfo* output_info;
         ORT_CHECK(g_ort_api->GetTensorTypeAndShape(output_tensor, &output_info));
 
@@ -188,7 +197,6 @@ oe_result_t ocall_onnx_run_inference(
 }
 
 oe_result_t ocall_onnx_release_session(uint64_t host_session_handle) {
-    // ... (This function is generic and does not need changes) ...
     if (!g_ort_api || host_session_handle == 0) return OE_INVALID_PARAMETER;
     auto it = g_host_onnx_sessions.find(host_session_handle);
     if (it != g_host_onnx_sessions.end()) {
@@ -199,7 +207,6 @@ oe_result_t ocall_onnx_release_session(uint64_t host_session_handle) {
     return OE_NOT_FOUND;
 }
 
-// THIS MAIN FUNCTION IS MODIFIED FOR INT64 INPUT
 int main(int argc, char* argv[]) {
     oe_result_t oe_host_result;
     oe_enclave_t* enclave = nullptr;
@@ -239,7 +246,6 @@ int main(int argc, char* argv[]) {
             model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context (host call)");
         OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave execution)");
 
-        // CHANGED FOR BERT: Use std::vector<int64_t> for token IDs
         std::vector<int64_t> input_tensor_values;
         if (use_stdin) {
             std::string line;
@@ -247,15 +253,12 @@ int main(int argc, char* argv[]) {
             std::stringstream ss(line);
             std::string value_str;
             while(std::getline(ss, value_str, ',')) {
-                // CHANGED FOR BERT: Use std::stoll to parse int64_t
                 input_tensor_values.push_back(std::stoll(value_str));
             }
         }
 
-        // CHANGED FOR BERT: Use sizeof(int64_t) for byte size calculation
         size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
         
-        // Output logits are still floats
         std::vector<float> output_tensor_values(20);
         size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
         size_t actual_output_byte_size = 0;
@@ -266,7 +269,6 @@ int main(int argc, char* argv[]) {
             output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer (host call)");
         OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave execution)");
 
-        // Print final float logits to stdout for the Go backend to capture
         size_t output_elements = actual_output_byte_size / sizeof(float);
         for (size_t i = 0; i < output_elements; ++i) {
             std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
