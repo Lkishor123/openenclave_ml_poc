@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     openssl \
     libssl-dev \
-    pkg-config
+    pkg-config \
+    ninja-build
 
 # Install Open Enclave SDK
 RUN git clone -b v0.19.0 --recursive --depth 1 https://github.com/openenclave/openenclave && \
