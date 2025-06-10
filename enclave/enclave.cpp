@@ -67,7 +67,7 @@ oe_result_t initialize_enclave_ml_context(
 
 oe_result_t enclave_infer(
     uint64_t enclave_session_handle,
-    const float* input_data,
+    const int64_t* input_data,
     size_t input_data_byte_size,
     float* output_buffer,
     size_t output_buffer_size_bytes,

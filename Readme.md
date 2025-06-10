@@ -27,3 +27,6 @@ docker run --rm -p 8080:8080 --device /dev/sgx_enclave confidential-ml-app
 ## For Simulation Mode:
 # This requires modifying backend/main.go to pass the --simulate flag
 docker run --rm -p 8080:8080 confidential-ml-app
+
+
+pip install optimum[exporters] transformers
