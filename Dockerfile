@@ -83,7 +83,7 @@ WORKDIR /app
 COPY backend/go.mod ./
 COPY backend/main.go .
 RUN go mod tidy
-RUN go build -o /main .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /main .
 
 # Stage 3: Final Production Image
 FROM ubuntu:20.04
