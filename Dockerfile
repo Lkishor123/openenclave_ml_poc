@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y \
 #     source /opt/openenclave/share/openenclave/openenclaverc
 
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ubuntu_2004_open-enclave_0.19.0_amd64.deb && \
-    apt-get install -y Ubuntu_2004_open-enclave_0.19.0_amd64.deb
+    apt-get install -y ./Ubuntu_2004_open-enclave_0.19.0_amd64.deb
 # Activate OE - Note: This only affects this RUN command, not subsequent ones.
 # The sourcing is correctly done in the build step below.
 
