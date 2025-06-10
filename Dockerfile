@@ -126,7 +126,7 @@ WORKDIR /app
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
 COPY --from=builder /app/model/simple_model.onnx ./model/simple_model.onnx
-COPY --from=go-builder /main ./
+COPY --from=go-builder /app/main ./
 COPY frontend ./frontend
 
 # Expose the port the Go backend listens on
