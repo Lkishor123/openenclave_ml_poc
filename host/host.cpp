@@ -1,4 +1,4 @@
-/* host/host.cpp - FINAL VERSION WITH MEMORY DECOUPLING */
+/* host/host.cpp - FINAL STABLE VERSION (SIMPLIFIED & HARDCODED) */
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -40,12 +40,11 @@ static const OrtApi* g_ort_api = nullptr;
         } \
     } while (0)
 
-// --- Host-side ONNX Runtime Globals ---
+// --- Globals and File Loading ---
 static OrtEnv* g_host_ort_env = nullptr;
 static std::map<uint64_t, OrtSession*> g_host_onnx_sessions;
 static uint64_t g_next_host_session_handle = 1;
 
-// --- File Loading ---
 std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     if (!std::filesystem::exists(filepath)) {
         throw std::runtime_error("[Host] File not found: " + filepath);
@@ -63,7 +62,7 @@ std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     return buffer;
 }
 
-// --- OCALL Implementations ---
+// --- OCALLs ---
 oe_result_t ocall_onnx_load_model(
     uint64_t* host_session_handle_out,
     const unsigned char* model_data,
@@ -94,105 +93,72 @@ oe_result_t ocall_onnx_run_inference(
     size_t output_buf_len_bytes,
     size_t* actual_output_len_bytes_out) {
 
-    OrtMemoryInfo* memory_info = nullptr;
-    std::vector<OrtValue*> input_tensors;
-    OrtValue* output_tensor = nullptr;
-
     try {
-        if (!g_ort_api || !input_data_from_enclave || !output_data_to_enclave || !actual_output_len_bytes_out || host_session_handle == 0) return OE_INVALID_PARAMETER;
-
         auto it = g_host_onnx_sessions.find(host_session_handle);
         if (it == g_host_onnx_sessions.end()) return OE_NOT_FOUND;
         OrtSession* session = it->second;
 
-        OrtAllocator* allocator;
-        ORT_CHECK(g_ort_api->GetAllocatorWithDefaultOptions(&allocator));
+        // --- SIMPLIFICATION: Hardcode the known input and output names ---
+        const char* input_names[] = {"input_ids", "attention_mask"};
+        const char* output_names[] = {"logits"};
 
-        // Get Input and Output node names
-        size_t num_input_nodes;
-        ORT_CHECK(g_ort_api->SessionGetInputCount(session, &num_input_nodes));
-        std::vector<std::string> input_node_names_str;
-        std::vector<const char*> input_node_names_ptr;
-        for (size_t i = 0; i < num_input_nodes; ++i) {
-            char* name_ptr;
-            ORT_CHECK(g_ort_api->SessionGetInputName(session, i, allocator, &name_ptr));
-            input_node_names_str.push_back(name_ptr);
-            allocator->Free(allocator, name_ptr);
-        }
-        for (const auto& name : input_node_names_str) {
-            input_node_names_ptr.push_back(name.c_str());
-        }
-        std::string output_name_str;
-        char* output_name_char_ptr;
-        ORT_CHECK(g_ort_api->SessionGetOutputName(session, 0, allocator, &output_name_char_ptr));
-        output_name_str = output_name_char_ptr;
-        allocator->Free(allocator, output_name_char_ptr);
-        const char* output_node_names[] = {output_name_str.c_str()};
-        
-        // --- THE FIX: Create a local copy of the input data from the enclave ---
+        // Create a local copy of the input data from the enclave to ensure memory safety
         size_t num_tokens = input_len_bytes / sizeof(int64_t);
         std::vector<int64_t> local_input_ids(num_tokens);
         memcpy(local_input_ids.data(), input_data_from_enclave, input_len_bytes);
-        // --- END FIX ---
 
+        // Prepare tensor data
         std::vector<int64_t> attention_mask_data(num_tokens, 1);
         std::vector<int64_t> input_shape = {1, (int64_t)num_tokens};
         
+        OrtMemoryInfo* memory_info;
         ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
         
-        // Build tensors in the correct order, now using only host-owned memory
-        for (const auto& name : input_node_names_str) {
-            OrtValue* tensor = nullptr;
-            if (name == "input_ids") {
-                ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
-                    memory_info, local_input_ids.data(), input_len_bytes,
-                    input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
-            } else if (name == "attention_mask") {
-                ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
-                    memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
-                    input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &tensor));
-            } else {
-                 if (num_input_nodes > 2) continue;
-                 else throw std::runtime_error("Unexpected model input name: " + name);
-            }
-            input_tensors.push_back(tensor);
-        }
+        OrtValue* input_ids_tensor = nullptr;
+        ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
+            memory_info, local_input_ids.data(), input_len_bytes,
+            input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &input_ids_tensor));
 
-        ORT_CHECK(g_ort_api->Run(session, nullptr, input_node_names_ptr.data(), input_tensors.data(), input_tensors.size(), output_node_names, 1, &output_tensor));
+        OrtValue* attention_mask_tensor = nullptr;
+        ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
+            memory_info, attention_mask_data.data(), attention_mask_data.size() * sizeof(int64_t),
+            input_shape.data(), input_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &attention_mask_tensor));
+        
+        std::vector<OrtValue*> input_tensors = {input_ids_tensor, attention_mask_tensor};
+        OrtValue* output_tensor = nullptr;
 
-        // Process output... (rest of the function is the same)
+        // Run Inference
+        ORT_CHECK(g_ort_api->Run(session, nullptr, input_names, input_tensors.data(), 2, output_names, 1, &output_tensor));
+
+        // Process Output
         OrtTensorTypeAndShapeInfo* output_info;
         ORT_CHECK(g_ort_api->GetTensorTypeAndShape(output_tensor, &output_info));
         size_t output_elements_count;
         ORT_CHECK(g_ort_api->GetTensorShapeElementCount(output_info, &output_elements_count));
-        g_ort_api->ReleaseTensorTypeAndShapeInfo(output_info);
-
         size_t required_output_bytes = output_elements_count * sizeof(float);
         if (actual_output_len_bytes_out) *actual_output_len_bytes_out = required_output_bytes;
 
+        if (required_output_bytes <= output_buf_len_bytes) {
+            float* output_data_ptr_onnx = nullptr;
+            ORT_CHECK(g_ort_api->GetTensorMutableData(output_tensor, (void**)&output_data_ptr_onnx));
+            memcpy(output_data_to_enclave, output_data_ptr_onnx, required_output_bytes);
+        }
+        
+        // Cleanup
+        g_ort_api->ReleaseTensorTypeAndShapeInfo(output_info);
+        g_ort_api->ReleaseValue(output_tensor);
+        g_ort_api->ReleaseValue(attention_mask_tensor);
+        g_ort_api->ReleaseValue(input_ids_tensor);
+        g_ort_api->ReleaseMemoryInfo(memory_info);
+
         if (required_output_bytes > output_buf_len_bytes) {
-            for(auto t : input_tensors) if (t) g_ort_api->ReleaseValue(t);
-            if (output_tensor) g_ort_api->ReleaseValue(output_tensor);
-            if (memory_info) g_ort_api->ReleaseMemoryInfo(memory_info);
             return OE_BUFFER_TOO_SMALL;
         }
 
-        float* output_data_ptr_onnx = nullptr;
-        ORT_CHECK(g_ort_api->GetTensorMutableData(output_tensor, (void**)&output_data_ptr_onnx));
-        memcpy(output_data_to_enclave, output_data_ptr_onnx, required_output_bytes);
-        
     } catch (const std::exception& e) {
-        std::cerr << "[Host] Exception in ocall_onnx_run_inference: " << e.what() << std::endl;
-        for(auto t : input_tensors) if (t) g_ort_api->ReleaseValue(t);
-        if (output_tensor) g_ort_api->ReleaseValue(output_tensor);
-        if (memory_info) g_ort_api->ReleaseMemoryInfo(memory_info);
+        // The ORT_CHECK macro will have already printed the detailed error
         return OE_FAILURE;
     }
-
-    for(auto t : input_tensors) g_ort_api->ReleaseValue(t);
-    g_ort_api->ReleaseValue(output_tensor);
-    g_ort_api->ReleaseMemoryInfo(memory_info);
-
     return OE_OK;
 }
 
@@ -214,7 +180,6 @@ int main(int argc, char* argv[]) {
     uint64_t enclave_ml_session_handle = 0;
 
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_model.onnx> <path_to_enclave.signed.so> [--use-stdin] [--simulate]" << std::endl;
         return 1;
     }
 
@@ -258,7 +223,6 @@ int main(int argc, char* argv[]) {
         }
 
         size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
-        
         std::vector<float> output_tensor_values(20);
         size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
         size_t actual_output_byte_size = 0;
@@ -279,7 +243,7 @@ int main(int argc, char* argv[]) {
         host_app_ret_val = 0;
 
     } catch (const std::exception& e) {
-        std::cerr << "[Host] Critical Error: " << e.what() << std::endl;
+        // Error messages are printed by the macros, so we just set the return value
         host_app_ret_val = 1;
     }
 
