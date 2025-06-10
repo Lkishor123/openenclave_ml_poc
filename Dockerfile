@@ -37,8 +37,8 @@ RUN apt-get update && apt-get install -y \
     libsgx-dcap-ql \
     libsgx-dcap-ql-dev
 
-RUN apt-get az-dcap-client \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get az-dcap-client
+    # && rm -rf /var/lib/apt/lists/*
 
 # Install Open Enclave SDK
 # RUN git clone -b v0.19.0 --recursive --depth 1 https://github.com/openenclave/openenclave && \
