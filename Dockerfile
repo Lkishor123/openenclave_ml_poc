@@ -38,7 +38,7 @@ RUN mkdir build && cd build && \
 FROM golang:1.18-alpine AS go-builder
 
 WORKDIR /app
-COPY backend/go.mod backend/go.sum ./
+COPY backend/go.mod ./
 RUN go mod download
 COPY backend/main.go .
 RUN go build -o /main .
