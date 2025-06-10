@@ -120,6 +120,9 @@ RUN apt-get update && apt-get install -y \
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ubuntu_2004_open-enclave_0.19.0_amd64.deb && \
     apt-get install -y ./Ubuntu_2004_open-enclave_0.19.0_amd64.deb
 
+# Install the Python transformers library
+RUN pip3 install transformers
+
 # --- FIX STARTS HERE ---
 # 1. Copy the ONNX Runtime shared libraries from the builder stage
 COPY --from=builder /opt/onnxruntime/lib/libonnxruntime.so* /usr/lib/
@@ -130,10 +133,12 @@ RUN ldconfig
 
 WORKDIR /app
 
+COPY tokenize_script.py .
+
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/model/model.onnx ./model/model.onnx
+COPY --from=builder /app/distilbert-sst2-onnx/model.onnx ./model/model.onnx
 COPY --from=builder /app/distilbert-sst2-onnx ./distilbert-sst2-onnx
 
 COPY --from=go-builder /main ./main
