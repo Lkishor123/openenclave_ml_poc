@@ -26,19 +26,20 @@ oe_result_t initialize_enclave_ml_context(
         return OE_INVALID_PARAMETER;
     }
 
-    oe_result_t ocall_mechanism_status;
+    oe_result_t ocall_status;
+    oe_result_t ocall_retval = OE_FAILURE;
     oe_result_t ocall_host_ret = OE_FAILURE;
     oe_result_t host_return_value = OE_FAILURE;
     uint64_t host_session_handle = 0;
 
-    ocall_mechanism_status = ocall_onnx_load_model(
+    ocall_status = ocall_onnx_load_model(
+        &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
         &host_session_handle,
         model_data,
         model_size);
-
-    if (ocall_mechanism_status != OE_OK) return ocall_mechanism_status;
+    if (ocall_status != OE_OK) return ocall_status;
     if (ocall_host_ret != OE_OK) return ocall_host_ret;
     if (host_return_value != OE_OK) return host_return_value;
     if (host_session_handle == 0) return OE_UNEXPECTED;
@@ -69,11 +70,13 @@ oe_result_t enclave_infer(
     }
 
     enclave_ml_session_t* session = &it->second;
-    oe_result_t ocall_mechanism_status;
+    oe_result_t ocall_status;
+    oe_result_t ocall_retval = OE_FAILURE;
     oe_result_t ocall_host_ret = OE_FAILURE;
     oe_result_t host_return_value = OE_FAILURE;
 
-    ocall_mechanism_status = ocall_onnx_run_inference(
+    ocall_status = ocall_onnx_run_inference(
+        &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
         session->host_onnx_session_handle,
@@ -82,8 +85,7 @@ oe_result_t enclave_infer(
         output_buffer,
         output_buffer_size_bytes,
         actual_output_size_bytes_out);
-
-    if (ocall_mechanism_status != OE_OK) return ocall_mechanism_status;
+    if (ocall_status != OE_OK) return ocall_status;
     if (ocall_host_ret != OE_OK) return ocall_host_ret;
     if (host_return_value != OE_OK) return host_return_value;
 
@@ -101,18 +103,20 @@ oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle) {
     }
 
     enclave_ml_session_t* session = &it->second;
-    oe_result_t ocall_mechanism_status;
+    oe_result_t ocall_status;
+    oe_result_t ocall_retval = OE_FAILURE;
     oe_result_t ocall_host_ret = OE_FAILURE;
     oe_result_t host_return_value = OE_FAILURE;
-    
-    ocall_mechanism_status = ocall_onnx_release_session(
+
+    ocall_status = ocall_onnx_release_session(
+        &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
         session->host_onnx_session_handle);
 
     g_enclave_sessions.erase(it);
 
-    if (ocall_mechanism_status != OE_OK) return ocall_mechanism_status;
+    if (ocall_status != OE_OK) return ocall_status;
     if (ocall_host_ret != OE_OK) return ocall_host_ret;
     if (host_return_value != OE_OK) return host_return_value;
     
