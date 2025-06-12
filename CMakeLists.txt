@@ -147,19 +147,19 @@ add_subdirectory(enclave)
 add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
-set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/model.onnx) 
+set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/model.ggml)
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
-set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/model.onnx) 
+set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/model.ggml)
 
 if(EXISTS ${MODEL_SOURCE_PATH})
     add_custom_command(
         TARGET GenerateEDL POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${MODEL_BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MODEL_SOURCE_PATH} ${MODEL_DEST_PATH}
-        COMMENT "Copying ONNX model to build directory: ${MODEL_DEST_PATH}"
+        COMMENT "Copying GGML model to build directory: ${MODEL_DEST_PATH}"
         VERBATIM)
 else()
-    message(WARNING "ONNX model file not found at ${MODEL_SOURCE_PATH}.")
+    message(WARNING "GGML model file not found at ${MODEL_SOURCE_PATH}.")
 endif()
 
 message(STATUS "Root ML PoC CMake configuration complete. Build type: ${CMAKE_BUILD_TYPE}")
