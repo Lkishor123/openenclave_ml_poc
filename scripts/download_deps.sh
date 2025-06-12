@@ -56,8 +56,8 @@ fi
 cd "$BERTCPP_DIR"
 git fetch --all
 # MODIFIED: Checkout the main branch to get the latest version and ensure it's up-to-date.
-git checkout main
-git pull origin main
+git checkout master
+git pull origin master
 # This ensures the correct version of ggml is used by initializing the submodule AFTER checkout
 git submodule update --init --recursive
 cd "$ROOT_DIR" # Return to the project root
