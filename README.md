@@ -11,6 +11,9 @@ scripts/download_deps.sh
 After the script finishes you will have `model/bert.bin` and a
 `tokenizer/` directory containing the tokenizer configuration.
 
+All components—including the Go backend and Docker image—expect the
+model to reside at this unified path.
+
 ### Architecture Overview
 
 The project uses the [GGML](https://github.com/ggml-org/ggml) library to run a

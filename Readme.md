@@ -2,6 +2,8 @@
 
 Run `scripts/download_deps.sh` to fetch the GGML model and tokenizer. **Run this before invoking CMake** so that `model/bert.bin` is available during configuration.
 
+The backend and Docker setup now look for the model exclusively at this path.
+
 ## Build Steps
 
 ```bash

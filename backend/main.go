@@ -85,7 +85,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Execute the C++ host application as a subprocess
 	hostAppPath := "./ml_host_prod_go"
-    modelPath := "./distilbert-sst2-ggml/model.ggml"
+    modelPath := "./model/bert.bin"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
