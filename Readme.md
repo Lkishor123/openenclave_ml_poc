@@ -14,7 +14,7 @@ cd openenclave_ml_poc/
 mkdir build
 cd build/
 
-cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DGGML_ROOT_DIR=/opt/ggml -DCMAKE_BUILD_TYPE=Debug
 
 make
 make run
