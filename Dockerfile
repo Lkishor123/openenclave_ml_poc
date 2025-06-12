@@ -56,10 +56,14 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # Activate OE - Note: This only affects this RUN command, not subsequent ones.
 # The sourcing is correctly done in the build step below.
 
-# Install ONNX Runtime
-RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.19.0/onnxruntime-linux-x64-1.19.0.tgz && \
-    tar -zxvf onnxruntime-linux-x64-1.19.0.tgz -C /opt && \
-    mv /opt/onnxruntime-linux-x64-1.19.0 /opt/onnxruntime
+
+# Clone and build GGML
+RUN git clone https://github.com/ggerganov/ggml.git && \
+    cd ggml && \
+    make && \
+    mkdir -p /opt/ggml/lib /opt/ggml/include && \
+    cp libggml.a /opt/ggml/lib/ && \
+    cp -r include/ /opt/ggml/include/
 
 # Copy source code
 COPY . /app
@@ -126,13 +130,12 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # Install the Python transformers library
 RUN pip3 install transformers
 
-# --- FIX STARTS HERE ---
-# 1. Copy the ONNX Runtime shared libraries from the builder stage
-COPY --from=builder /opt/onnxruntime/lib/libonnxruntime.so* /usr/lib/
+# Copy GGML artifacts from the builder stage
+COPY --from=builder /opt/ggml/lib/libggml.a /usr/lib/
+COPY --from=builder /opt/ggml/include /usr/include/ggml
 
-# 2. Update the dynamic linker cache to recognize the new libraries
+# Refresh linker cache
 RUN ldconfig
-# --- FIX ENDS HERE ---
 
 WORKDIR /app
 
@@ -141,7 +144,7 @@ COPY tokenize_script.py .
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/distilbert-sst2-onnx/model.onnx ./model/model.onnx
+COPY --from=builder /app/distilbert-sst2-onnx/model.ggml ./model/model.ggml
 COPY --from=builder /app/distilbert-sst2-onnx ./distilbert-sst2-onnx
 
 COPY --from=go-builder /main ./main
