@@ -1,23 +1,21 @@
 # Openenclave_ML_POC
 
-## Prepare the DistilBERT model (GGML)
+## Download Dependencies
 
-This project uses a GGML formatted version of
-`distilbert-base-uncased-finetuned-sst-2-english`.
-To create it:
+Run the helper script to download a prebuilt GGML model and tokenizer files:
 
 ```bash
-# Clone ggml and install dependencies
-git clone https://github.com/ggerganov/ggml.git
-cd ggml/examples/bert
-pip install transformers
-
-# Convert the Hugging Face model to GGML
-python convert-bert.py distilbert-base-uncased-finetuned-sst-2-english \ 
-    ../../distilbert.ggml
+scripts/download_deps.sh
 ```
 
-Copy the resulting `distilbert.ggml` into the `model/` directory of this repo.
+After the script finishes you will have `model/bert.bin` and a
+`tokenizer/` directory containing the tokenizer configuration.
+
+### Architecture Overview
+
+The project uses the [GGML](https://github.com/ggml-org/ggml) library to run a
+BERT model inside an Open Enclave. The host application loads `bert.bin`, passes
+tokenized input to the enclave, and prints the resulting logits.
 
 Before building the C++ components, clone the GGML and bert.cpp sources used by
 the project:
@@ -51,6 +49,14 @@ cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make
 make run
+```
+
+### Running the Host Manually
+
+After building, you can test the GGML path directly:
+
+```bash
+./build/host/ml_host_prod_go model/bert.bin enclave/enclave_prod.signed.so --use-stdin
 ```
 
 ## Docker Build
