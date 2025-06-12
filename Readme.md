@@ -1,6 +1,6 @@
 ## Download Dependencies
 
-Run `scripts/download_deps.sh` to fetch the GGML model and tokenizer.
+Run `scripts/download_deps.sh` to fetch the GGML model and tokenizer. **Run this before invoking CMake** so that `model/bert.bin` is available during configuration.
 
 ## Build Steps
 
@@ -13,6 +13,7 @@ oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated \
 
 mkdir build
 cd build
+# Ensure scripts/download_deps.sh has been run so model/bert.bin exists
 cmake .. -DGGML_ROOT_DIR=/opt/ggml -DCMAKE_BUILD_TYPE=Debug
 make
 ```

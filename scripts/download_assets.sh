@@ -18,10 +18,10 @@ cp -r include/ ${GGML_DIR}/include/
 # Convert Hugging Face model to GGML format
 cd examples/bert
 pip3 install --no-cache-dir transformers
-python3 convert-bert.py ${MODEL_ID} /tmp/model.ggml
+python3 convert-bert.py ${MODEL_ID} /tmp/bert.bin
 
 mkdir -p "${MODEL_DIR}"
-mv /tmp/model.ggml "${MODEL_DIR}/model.ggml"
+mv /tmp/bert.bin "${MODEL_DIR}/bert.bin"
 
 # cleanup
 test -d /tmp/ggml && rm -rf /tmp/ggml
