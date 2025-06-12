@@ -75,6 +75,14 @@ get_target_property(GGML_LIBRARY ggml LOCATION)
 set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
 set(GLOBAL_GGML_LIBRARY ${GGML_LIBRARY} CACHE INTERNAL "GGML library path")
 
+# --- Build bert.cpp from external directory ---
+set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
+if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
+endif()
+add_subdirectory(${BERTCPP_SOURCE_DIR} external_bertcpp_build)
+set(GLOBAL_BERTCPP_INCLUDE_DIR ${BERTCPP_SOURCE_DIR} CACHE INTERNAL "bert.cpp include directory")
+
 # --- EDL File Processing ---
 set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/enclave.edl) 
 set(EDL_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/edl_generated)
