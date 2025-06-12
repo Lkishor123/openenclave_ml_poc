@@ -136,6 +136,8 @@ add_subdirectory(enclave)
 add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
+# The GGML model is not checked in. Developers should run
+# `scripts/download_deps.sh` before building or using the run targets.
 set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/model.ggml)
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
 set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/model.ggml)

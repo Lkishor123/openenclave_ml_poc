@@ -45,8 +45,10 @@ message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_PATH
 
 # 2. Updated the 'run' target to work with the new stdin-based host
 # This now pipes a sample input string to the executable for testing.
+# NOTE: The GGML model must be downloaded via scripts/download_deps.sh
+# before attempting to run this target.
 add_custom_target(run
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "if [ ! -f \"${MODEL_PATH_FOR_RUN_TARGET}\" ]; then echo 'Model file missing at ${MODEL_PATH_FOR_RUN_TARGET}. Run scripts/download_deps.sh first.'; exit 1; fi; echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_PATH_FOR_RUN_TARGET}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
@@ -54,7 +56,7 @@ add_custom_target(run
 )
 
 add_custom_target(run_simulate
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "if [ ! -f \"${MODEL_PATH_FOR_RUN_TARGET}\" ]; then echo 'Model file missing at ${MODEL_PATH_FOR_RUN_TARGET}. Run scripts/download_deps.sh first.'; exit 1; fi; echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC in SIMULATION mode."
