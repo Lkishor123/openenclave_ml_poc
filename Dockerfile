@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     python3 \
+    python3-pip \
     wget \
     openssl \
     libssl-dev \
@@ -56,14 +57,13 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # Activate OE - Note: This only affects this RUN command, not subsequent ones.
 # The sourcing is correctly done in the build step below.
 
-# Install ONNX Runtime
-RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.19.0/onnxruntime-linux-x64-1.19.0.tgz && \
-    tar -zxvf onnxruntime-linux-x64-1.19.0.tgz -C /opt && \
-    mv /opt/onnxruntime-linux-x64-1.19.0 /opt/onnxruntime
 
 # Copy source code
 COPY . /app
 WORKDIR /app
+
+# Download GGML library and BERT model
+RUN ./scripts/download_assets.sh
 
 # Build the C++ application
 # Note: The WORKDIR is /app, so we cd into build from there.
@@ -72,7 +72,7 @@ RUN rm -rf build && mkdir build && \
     /opt/openenclave/bin/oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated --search-path /opt/openenclave/include && \
     cd build && \
     . /opt/openenclave/share/openenclave/openenclaverc && \
-    cmake .. -DONNXRUNTIME_ROOT_DIR=/opt/onnxruntime && \
+    cmake .. -DGGML_ROOT_DIR=/opt/ggml && \
     make
 
 # Stage 2: Build the Go Backend
@@ -126,13 +126,12 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # Install the Python transformers library
 RUN pip3 install transformers
 
-# --- FIX STARTS HERE ---
-# 1. Copy the ONNX Runtime shared libraries from the builder stage
-COPY --from=builder /opt/onnxruntime/lib/libonnxruntime.so* /usr/lib/
+# Copy GGML artifacts from the builder stage
+COPY --from=builder /opt/ggml/lib/libggml.a /usr/lib/
+COPY --from=builder /opt/ggml/include /usr/include/ggml
 
-# 2. Update the dynamic linker cache to recognize the new libraries
+# Refresh linker cache
 RUN ldconfig
-# --- FIX ENDS HERE ---
 
 WORKDIR /app
 
@@ -141,8 +140,8 @@ COPY tokenize_script.py .
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/distilbert-sst2-onnx/model.onnx ./model/model.onnx
-COPY --from=builder /app/distilbert-sst2-onnx ./distilbert-sst2-onnx
+COPY --from=builder /app/model/bert.bin ./model/bert.bin
+COPY --from=builder /app/distilbert-sst2-ggml ./distilbert-sst2-ggml
 
 COPY --from=go-builder /main ./main
 COPY frontend ./frontend

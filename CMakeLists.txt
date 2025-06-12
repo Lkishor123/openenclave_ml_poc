@@ -59,32 +59,29 @@ else()
     message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
 endif()
 
-# --- Find ONNX Runtime ---
-option(ONNXRUNTIME_ROOT_DIR "Root directory of the ONNX Runtime prebuilt library and headers" "/opt/onnxruntime")
-message(STATUS "Attempting to use ONNXRUNTIME_ROOT_DIR: ${ONNXRUNTIME_ROOT_DIR} (This can be overridden with -D parameter)")
+# --- Build GGML from external directory ---
+set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
+set(GGML_SOURCE_DIR ${EXTERNAL_DIR}/ggml)
 
-set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT_DIR}/include")
-set(ONNXRUNTIME_LIBRARY_DIR "${ONNXRUNTIME_ROOT_DIR}/lib")
-
-if(NOT EXISTS "${ONNXRUNTIME_ROOT_DIR}")
-    message(FATAL_ERROR "ONNXRUNTIME_ROOT_DIR '${ONNXRUNTIME_ROOT_DIR}' does not exist.")
-endif()
-if(NOT EXISTS "${ONNXRUNTIME_INCLUDE_DIR}/onnxruntime_c_api.h")
-    message(FATAL_ERROR "ONNX Runtime header 'onnxruntime_c_api.h' not found in ${ONNXRUNTIME_INCLUDE_DIR}.")
+if(NOT EXISTS "${GGML_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "GGML source not found at ${GGML_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
 endif()
 
-find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime PATHS "${ONNXRUNTIME_LIBRARY_DIR}" NO_DEFAULT_PATH)
-if(NOT ONNXRUNTIME_LIBRARY)
-    find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime PATHS "${ONNXRUNTIME_LIBRARY_DIR}") 
-    if(NOT ONNXRUNTIME_LIBRARY)
-        message(FATAL_ERROR "libonnxruntime not found in ${ONNXRUNTIME_LIBRARY_DIR}.")
-    endif()
-endif()
-message(STATUS "  ONNX Runtime Include Dir: ${ONNXRUNTIME_INCLUDE_DIR}")
-message(STATUS "  ONNX Runtime Library: ${ONNXRUNTIME_LIBRARY}")
+set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(${GGML_SOURCE_DIR} external_ggml_build)
 
-set(GLOBAL_ONNXRUNTIME_INCLUDE_DIR ${ONNXRUNTIME_INCLUDE_DIR} CACHE INTERNAL "ONNX Runtime include directory")
-set(GLOBAL_ONNXRUNTIME_LIBRARY ${ONNXRUNTIME_LIBRARY} CACHE INTERNAL "ONNX Runtime library path")
+get_target_property(GGML_LIBRARY ggml LOCATION)
+set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
+set(GLOBAL_GGML_LIBRARY ${GGML_LIBRARY} CACHE INTERNAL "GGML library path")
+
+# --- Build bert.cpp from external directory ---
+set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
+if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
+endif()
+add_subdirectory(${BERTCPP_SOURCE_DIR} external_bertcpp_build)
+set(GLOBAL_BERTCPP_INCLUDE_DIR ${BERTCPP_SOURCE_DIR} CACHE INTERNAL "bert.cpp include directory")
 
 # --- EDL File Processing ---
 set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/enclave.edl) 
@@ -147,19 +144,21 @@ add_subdirectory(enclave)
 add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
-set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/model.onnx) 
+# The GGML model is not checked in. Developers should run
+# `scripts/download_deps.sh` before building or using the run targets.
+set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/bert.bin)
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
-set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/model.onnx) 
+set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/bert.bin)
 
 if(EXISTS ${MODEL_SOURCE_PATH})
     add_custom_command(
         TARGET GenerateEDL POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${MODEL_BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MODEL_SOURCE_PATH} ${MODEL_DEST_PATH}
-        COMMENT "Copying ONNX model to build directory: ${MODEL_DEST_PATH}"
+        COMMENT "Copying GGML model to build directory: ${MODEL_DEST_PATH}"
         VERBATIM)
 else()
-    message(WARNING "ONNX model file not found at ${MODEL_SOURCE_PATH}.")
+    message(WARNING "Model file not found at ${MODEL_SOURCE_PATH}. Run scripts/download_deps.sh to fetch it.")
 endif()
 
 message(STATUS "Root ML PoC CMake configuration complete. Build type: ${CMAKE_BUILD_TYPE}")

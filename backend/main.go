@@ -1,15 +1,15 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+        "bytes"
+        "encoding/json"
+        "fmt"
+        "log"
+        "net/http"
+        "os"
+        "os/exec"
+        "strconv"
+        "strings"
 )
 
 // Global model config instance
@@ -31,10 +31,9 @@ type ResponsePayload struct {
 }
 
 func main() {
-	var err error
 
 	// Load the model config at startup (we still need this)
-	configPath := "./distilbert-sst2-onnx/config.json"
+    configPath := "./distilbert-sst2-ggml/config.json"
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatalf("Failed to read model config from '%s': %v", configPath, err)
@@ -64,7 +63,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 1. Call Python script for tokenization ---
-	tokenizerDir := "./distilbert-sst2-onnx"
+    tokenizerDir := "./distilbert-sst2-ggml"
 	// Execute `python3 tokenize_script.py <tokenizer_directory>`
 	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
 	// Pass the input text from the UI to the Python script's standard input
@@ -80,13 +79,13 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Tokenization failed: %s", pyStderr.String()), http.StatusInternalServerError)
 		return
 	}
-	
+
 	inputStringForCpp := strings.TrimSpace(pyStdout.String())
 	// ---
 
 	// 2. Execute the C++ host application as a subprocess
 	hostAppPath := "./ml_host_prod_go"
-	modelPath := "./distilbert-sst2-onnx/model.onnx"
+    modelPath := "./model/bert.bin"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")

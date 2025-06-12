@@ -11,7 +11,7 @@
 #define ENCLAVE_LOG(level, fmt, ...) printf("[" level "] [Enclave] " fmt "\n", ##__VA_ARGS__)
 
 typedef struct _enclave_ml_session {
-    uint64_t host_onnx_session_handle;
+    uint64_t host_ggml_session_handle;
 } enclave_ml_session_t;
 
 static std::map<uint64_t, enclave_ml_session_t> g_enclave_sessions;
@@ -32,7 +32,7 @@ oe_result_t initialize_enclave_ml_context(
     oe_result_t host_return_value = OE_FAILURE;
     uint64_t host_session_handle = 0;
 
-    ocall_status = ocall_onnx_load_model(
+    ocall_status = ocall_ggml_load_model(
         &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
@@ -75,11 +75,11 @@ oe_result_t enclave_infer(
     oe_result_t ocall_host_ret = OE_FAILURE;
     oe_result_t host_return_value = OE_FAILURE;
 
-    ocall_status = ocall_onnx_run_inference(
+    ocall_status = ocall_ggml_run_inference(
         &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
-        session->host_onnx_session_handle,
+        session->host_ggml_session_handle,
         input_data,
         input_data_byte_size,
         output_buffer,
@@ -108,11 +108,11 @@ oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle) {
     oe_result_t ocall_host_ret = OE_FAILURE;
     oe_result_t host_return_value = OE_FAILURE;
 
-    ocall_status = ocall_onnx_release_session(
+    ocall_status = ocall_ggml_release_session(
         &ocall_retval,
         &ocall_host_ret,
         &host_return_value,
-        session->host_onnx_session_handle);
+        session->host_ggml_session_handle);
 
     g_enclave_sessions.erase(it);
 
