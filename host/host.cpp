@@ -204,7 +204,20 @@ int main(int argc, char* argv[]) {
     }
 
     g_ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    ORT_CHECK(g_ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "host_app_ort_env", &g_host_ort_env));
+    // When per-session thread pools are disabled we must create the
+    // environment using CreateEnvWithGlobalThreadPools. Configure a
+    // minimal global thread pool of one thread for both intra- and
+    // inter-op execution to keep the OCALL environment simple.
+    OrtThreadingOptions* threading_options = nullptr;
+    ORT_CHECK(g_ort_api->CreateThreadingOptions(&threading_options));
+    ORT_CHECK(g_ort_api->SetGlobalIntraOpNumThreads(threading_options, 1));
+    ORT_CHECK(g_ort_api->SetGlobalInterOpNumThreads(threading_options, 1));
+    ORT_CHECK(g_ort_api->CreateEnvWithGlobalThreadPools(
+        ORT_LOGGING_LEVEL_WARNING,
+        "host_app_ort_env",
+        threading_options,
+        &g_host_ort_env));
+    if (threading_options) g_ort_api->ReleaseThreadingOptions(threading_options);
 
     try {
         uint32_t enclave_flags = OE_ENCLAVE_FLAG_DEBUG;
