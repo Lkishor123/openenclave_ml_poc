@@ -204,8 +204,17 @@ int main(int argc, char* argv[]) {
     }
 
     g_ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    ORT_CHECK(g_ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "host_app_ort_env", &g_host_ort_env));
+    // Create an OrtThreadingOptions structure to configure the global thread pool
+    OrtThreadingOptions* threading_options;
+    ORT_CHECK(g_ort_api->CreateThreadingOptions(&threading_options));
+    // Here you could configure the thread pools if needed, but defaults are fine for now.
 
+    // Create the environment using the function required by our new session options
+    ORT_CHECK(g_ort_api->CreateEnvWithGlobalThreadPools(
+        ORT_LOGGING_LEVEL_WARNING, "host_app_ort_env", threading_options, &g_host_ort_env));
+        
+    // Release the threading options object as it's no longer needed
+    g_ort_api->ReleaseThreadingOptions(threading_options);
     try {
         uint32_t enclave_flags = OE_ENCLAVE_FLAG_DEBUG;
         if (simulate) enclave_flags |= OE_ENCLAVE_FLAG_SIMULATE;
