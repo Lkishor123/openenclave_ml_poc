@@ -57,13 +57,15 @@ std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
 }
 
 oe_result_t ocall_onnx_load_model(
-    oe_result_t* ocall_return_value,
+    oe_result_t* ocall_host_ret,
+    oe_result_t* host_return_value,
     uint64_t* host_session_handle_out,
     const unsigned char* model_data,
     size_t model_data_len) {
-    if (!ocall_return_value || !g_ort_api || !g_host_ort_env || !host_session_handle_out || !model_data || model_data_len == 0)
+    if (!ocall_host_ret || !host_return_value || !g_ort_api || !g_host_ort_env || !host_session_handle_out || !model_data || model_data_len == 0)
         return OE_INVALID_PARAMETER;
-    *ocall_return_value = OE_FAILURE;
+    *ocall_host_ret = OE_FAILURE;
+    *host_return_value = OE_FAILURE;
     try {
         *host_session_handle_out = 0;
         OrtSessionOptions* session_options = nullptr;
@@ -78,28 +80,32 @@ oe_result_t ocall_onnx_load_model(
         uint64_t current_host_handle = g_next_host_session_handle++;
         g_host_onnx_sessions[current_host_handle] = session;
         *host_session_handle_out = current_host_handle;
-        *ocall_return_value = OE_OK;
+        *host_return_value = OE_OK;
     } catch (const std::exception& e) {
         std::cerr << "[Host] Exception in ocall_onnx_load_model: " << e.what() << std::endl;
-        *ocall_return_value = OE_FAILURE;
+        *host_return_value = OE_FAILURE;
     }
+    *ocall_host_ret = OE_OK;
     return OE_OK;
 }
 
 oe_result_t ocall_onnx_run_inference(
-    oe_result_t* ocall_return_value,
+    oe_result_t* ocall_host_ret,
+    oe_result_t* host_return_value,
     uint64_t host_session_handle,
     const void* input_data_from_enclave,
     size_t input_len_bytes,
     void* output_data_to_enclave,
     size_t output_buf_len_bytes,
     size_t* actual_output_len_bytes_out) {
-    if (!ocall_return_value) return OE_INVALID_PARAMETER;
-    *ocall_return_value = OE_FAILURE;
+    if (!ocall_host_ret || !host_return_value) return OE_INVALID_PARAMETER;
+    *ocall_host_ret = OE_FAILURE;
+    *host_return_value = OE_FAILURE;
     try {
         auto it = g_host_onnx_sessions.find(host_session_handle);
         if (it == g_host_onnx_sessions.end()) {
-            *ocall_return_value = OE_NOT_FOUND;
+            *host_return_value = OE_NOT_FOUND;
+            *ocall_host_ret = OE_OK;
             return OE_OK;
         }
         OrtSession* session = it->second;
@@ -133,9 +139,9 @@ oe_result_t ocall_onnx_run_inference(
             float* output_data_ptr_onnx = nullptr;
             ORT_CHECK(g_ort_api->GetTensorMutableData(output_tensor, (void**)&output_data_ptr_onnx));
             memcpy(output_data_to_enclave, output_data_ptr_onnx, required_output_bytes);
-            *ocall_return_value = OE_OK;
+            *host_return_value = OE_OK;
         } else {
-            *ocall_return_value = OE_BUFFER_TOO_SMALL;
+            *host_return_value = OE_BUFFER_TOO_SMALL;
         }
         g_ort_api->ReleaseTensorTypeAndShapeInfo(output_info);
         g_ort_api->ReleaseValue(output_tensor);
@@ -143,24 +149,29 @@ oe_result_t ocall_onnx_run_inference(
         g_ort_api->ReleaseValue(input_ids_tensor);
         g_ort_api->ReleaseMemoryInfo(memory_info);
     } catch (const std::exception& e) {
-        *ocall_return_value = OE_FAILURE;
+        *host_return_value = OE_FAILURE;
     }
+    *ocall_host_ret = OE_OK;
     return OE_OK;
 }
 
 oe_result_t ocall_onnx_release_session(
-    oe_result_t* ocall_return_value,
+    oe_result_t* ocall_host_ret,
+    oe_result_t* host_return_value,
     uint64_t host_session_handle) {
-    if (!ocall_return_value || !g_ort_api || host_session_handle == 0)
+    if (!ocall_host_ret || !host_return_value || !g_ort_api || host_session_handle == 0)
         return OE_INVALID_PARAMETER;
+    *ocall_host_ret = OE_FAILURE;
+    *host_return_value = OE_FAILURE;
     auto it = g_host_onnx_sessions.find(host_session_handle);
     if (it != g_host_onnx_sessions.end()) {
         if (it->second) g_ort_api->ReleaseSession(it->second);
         g_host_onnx_sessions.erase(it);
-        *ocall_return_value = OE_OK;
+        *host_return_value = OE_OK;
     } else {
-        *ocall_return_value = OE_NOT_FOUND;
+        *host_return_value = OE_NOT_FOUND;
     }
+    *ocall_host_ret = OE_OK;
     return OE_OK;
 }
 
