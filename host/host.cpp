@@ -58,8 +58,11 @@ oe_result_t ocall_ggml_load_model(
     *host_session_handle_out = 0;
 
     bert_ctx* ctx = bert_load_from_file(g_model_path.c_str(), true);
-    if (!ctx)
+    if (!ctx) {
+        fprintf(stderr, "bert_load_from_file failed\n");
         return OE_OK;
+    }
+
 
     bert_allocate_buffers(ctx, bert_n_max_tokens(ctx), 1);
     uint64_t handle = g_next_session_handle++;
@@ -130,6 +133,8 @@ oe_result_t ocall_ggml_release_session(
 
     auto it = g_sessions.find(host_session_handle);
     if (it != g_sessions.end()) {
+        // We can now safely call bert_free because this function
+        // will only be called once when the server shuts down.
         bert_free(it->second);
         g_sessions.erase(it);
         *host_return_value = OE_OK;
@@ -139,29 +144,62 @@ oe_result_t ocall_ggml_release_session(
     return OE_OK;
 }
 
+// The main application logic, now refactored to be called from the main loop.
+void process_inference(oe_enclave_t* enclave, uint64_t session_handle, const std::string& line) {
+    std::vector<int64_t> input_tensor_values;
+    std::stringstream ss(line);
+    std::string value_str;
+    while(std::getline(ss, value_str, ',')) {
+        input_tensor_values.push_back(std::stoll(value_str));
+    }
+
+    size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
+    std::vector<float> output_tensor_values(768); // Typical embedding size
+    size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
+    size_t actual_output_byte_size = 0;
+    oe_result_t ecall_ret_status;
+
+    OE_HOST_CHECK(enclave_infer(
+        enclave, &ecall_ret_status, session_handle,
+        input_tensor_values.data(), input_data_byte_size,
+        output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer");
+    OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
+
+    size_t output_elements = actual_output_byte_size / sizeof(float);
+    for (size_t i = 0; i < output_elements; ++i) {
+        std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
+    }
+    // MODIFIED: Added a newline and flushed stdout to ensure the Go backend
+    // receives the message immediately.
+    std::cout << std::endl;
+    fflush(stdout);
+}
+
+
 int main(int argc, char* argv[]) {
     oe_enclave_t* enclave = nullptr;
     int host_app_ret_val = 1;
     uint64_t enclave_ml_session_handle = 0;
 
     if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <model_path> <enclave_path> [--simulate]" << std::endl;
         return 1;
     }
     g_model_path = argv[1];
     const std::string enclave_filepath = argv[2];
-    bool use_stdin = false;
     bool simulate = false;
     for (int i = 3; i < argc; ++i) {
-        if (std::string(argv[i]) == "--use-stdin") use_stdin = true;
-        else if (std::string(argv[i]) == "--simulate") simulate = true;
+        if (std::string(argv[i]) == "--simulate") simulate = true;
     }
 
     try {
+        // --- One-time Setup ---
         uint32_t enclave_flags = OE_ENCLAVE_FLAG_DEBUG;
         if (simulate) enclave_flags |= OE_ENCLAVE_FLAG_SIMULATE;
         OE_HOST_CHECK(oe_create_enclave_enclave(
             enclave_filepath.c_str(), OE_ENCLAVE_TYPE_AUTO,
             enclave_flags, nullptr, 0, &enclave), "oe_create_enclave_enclave");
+
         std::vector<unsigned char> model_buffer = load_file_to_buffer(g_model_path);
         oe_result_t ecall_ret_status;
         OE_HOST_CHECK(initialize_enclave_ml_context(
@@ -169,34 +207,24 @@ int main(int argc, char* argv[]) {
             model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context");
         OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave)");
 
-        std::vector<int64_t> input_tensor_values;
-        if (use_stdin) {
-            std::string line;
-            std::getline(std::cin, line);
-            std::stringstream ss(line);
-            std::string value_str;
-            while(std::getline(ss, value_str, ',')) {
-                input_tensor_values.push_back(std::stoll(value_str));
+        // --- Main Processing Loop ---
+        // The host now loops indefinitely, reading token strings from stdin,
+        // processing them, and writing results to stdout.
+        std::string line;
+        while (std::getline(std::cin, line)) {
+            if (line.empty()) {
+                continue;
             }
+            process_inference(enclave, enclave_ml_session_handle, line);
         }
 
-        size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
-        std::vector<float> output_tensor_values(768); // typical embedding size
-        size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
-        size_t actual_output_byte_size = 0;
-        OE_HOST_CHECK(enclave_infer(
-            enclave, &ecall_ret_status, enclave_ml_session_handle,
-            input_tensor_values.data(), input_data_byte_size,
-            output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer");
-        OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
-        size_t output_elements = actual_output_byte_size / sizeof(float);
-        for (size_t i = 0; i < output_elements; ++i) {
-            std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
-        }
-        std::cout << std::endl;
+        // --- One-time Cleanup ---
+        // This code is now only reached when the stdin pipe is closed by the parent process.
         terminate_enclave_ml_context(enclave, &ecall_ret_status, enclave_ml_session_handle);
         host_app_ret_val = 0;
-    } catch (const std::exception&) {
+
+    } catch (const std::exception& e) {
+        std::cerr << "Host exception: " << e.what() << std::endl;
         host_app_ret_val = 1;
     }
     if (enclave) oe_terminate_enclave(enclave);

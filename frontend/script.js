@@ -8,7 +8,7 @@ document.getElementById('send-button').addEventListener('click', async () => {
         return;
     }
 
-    outputArea.textContent = 'Sending to backend...';
+    outputArea.textContent = 'Analyzing sentiment...';
 
     try {
         const response = await fetch('/infer', {
@@ -25,7 +25,16 @@ document.getElementById('send-button').addEventListener('click', async () => {
         }
 
         const result = await response.json();
-        outputArea.textContent = JSON.stringify(result, null, 2);
+
+        // MODIFIED: Display the final sentiment from the new 'sentiment' field.
+        if (result.sentiment) {
+            outputArea.textContent = `Predicted Sentiment: ${result.sentiment}`;
+        } else if (result.error) {
+            outputArea.textContent = `Error: ${result.error}`;
+        } else {
+            // Fallback for unexpected response format
+            outputArea.textContent = JSON.stringify(result, null, 2);
+        }
 
     } catch (error) {
         console.error('Inference error:', error);
