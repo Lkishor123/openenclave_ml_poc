@@ -12,7 +12,6 @@ fi
 mkdir -p model tokenizer
 
 # --- Model Download ---
-# REVERTED: Reverted to using a simple curl command with the correct, direct download link
 # for the model file. The -L flag handles redirects.
 echo "Downloading compatible model..."
 curl -L https://huggingface.co/CompendiumLabs/bge-base-en-v1.5-gguf/resolve/main/bge-base-en-v1.5-q4_k_m.gguf -o model/bert.bin
@@ -47,7 +46,6 @@ fi
 cd "$BERTCPP_DIR"
 git fetch --all
 git checkout "$BERTCPP_COMMIT"
-# This ensures the correct version of ggml is used by initializing the submodule AFTER checkout
 git submodule update --init --recursive
 cd "$ROOT_DIR" # Return to the project root
 
