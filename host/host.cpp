@@ -72,6 +72,13 @@ oe_result_t ocall_onnx_load_model(
         *host_session_handle_out = 0;
         OrtSessionOptions* session_options = nullptr;
         ORT_CHECK(g_ort_api->CreateSessionOptions(&session_options));
+        // Disable advanced memory features and multi-threading to reduce
+        // complexity when running inside an OCALL context. These features
+        // were observed to trigger heap corruption on some systems.
+        ORT_CHECK(g_ort_api->DisableMemPattern(session_options));
+        ORT_CHECK(g_ort_api->DisablePerSessionThreads(session_options));
+        ORT_CHECK(g_ort_api->SetIntraOpNumThreads(session_options, 1));
+        ORT_CHECK(g_ort_api->SetInterOpNumThreads(session_options, 1));
         OrtSession* session = nullptr;
         ORT_CHECK(g_ort_api->CreateSessionFromArray(g_host_ort_env, model_data, model_data_len, session_options, &session));
         if (session_options) g_ort_api->ReleaseSessionOptions(session_options);
@@ -112,7 +119,10 @@ oe_result_t ocall_onnx_run_inference(
         std::vector<int64_t> input_shape = {1, (int64_t)num_tokens};
         
         OrtMemoryInfo* memory_info;
-        ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
+        // The input buffers are allocated by this host code, not by ONNX Runtime
+        // itself. Use the device allocator variant rather than the arena
+        // allocator to avoid any attempt by ORT to manage this memory.
+        ORT_CHECK(g_ort_api->CreateCpuMemoryInfo(OrtDeviceAllocator, OrtMemTypeDefault, &memory_info));
         
         OrtValue* input_ids_tensor = nullptr;
         ORT_CHECK(g_ort_api->CreateTensorWithDataAsOrtValue(
