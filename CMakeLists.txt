@@ -59,33 +59,23 @@ else()
     message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
 endif()
 
-# --- Build GGML from external directory ---
+# --- Build bert.cpp and its ggml dependency from external directory ---
 set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
-set(GGML_SOURCE_DIR ${EXTERNAL_DIR}/ggml)
-
-if(NOT EXISTS "${GGML_SOURCE_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "GGML source not found at ${GGML_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
-endif()
-
-set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(${GGML_SOURCE_DIR} external_ggml_build)
-
-# FIXED: Store the target name 'ggml' directly instead of trying to get its location.
-set(GLOBAL_GGML_LIBRARY ggml CACHE INTERNAL "GGML library target")
-set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
-
-
-# --- Build bert.cpp from external directory ---
 set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
 if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
 endif()
 
-# FIXED: Prevent bert.cpp from building its own instance of ggml.
-set(BERT_STANDALONE ON CACHE BOOL "" FORCE)
+# Let bert.cpp build its own ggml dependency
 add_subdirectory(${BERTCPP_SOURCE_DIR} external_bertcpp_build)
+
+# Set global variables that sub-projects can use to find the libraries and headers.
+# After add_subdirectory, the 'ggml' and 'bert' targets are available.
+set(GLOBAL_GGML_LIBRARY ggml CACHE INTERNAL "GGML library target")
+set(GLOBAL_BERTCPP_LIBRARY bert CACHE INTERNAL "bert.cpp library target")
+set(GLOBAL_GGML_INCLUDE_DIR ${BERTCPP_SOURCE_DIR}/ggml/include CACHE INTERNAL "GGML include directory")
 set(GLOBAL_BERTCPP_INCLUDE_DIR ${BERTCPP_SOURCE_DIR} CACHE INTERNAL "bert.cpp include directory")
+
 
 # --- EDL File Processing ---
 set(EDL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/common/enclave.edl) 
