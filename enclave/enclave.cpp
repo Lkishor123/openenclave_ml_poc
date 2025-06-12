@@ -1,4 +1,4 @@
-/* enclave/enclave.cpp - FINAL, DEFINITIVELY CORRECTED VERSION */
+/* enclave/enclave.cpp - FINAL CORRECTED VERSION */
 #include <stdio.h>
 #include <string.h>
 #include <vector>
@@ -69,8 +69,6 @@ oe_result_t enclave_infer(
     oe_result_t ocall_mechanism_status;
     oe_result_t ocall_actual_retval;
 
-    // The EDL for `ocall_onnx_run_inference` uses `size` which is in bytes.
-    // The C++ code in host.cpp correctly uses input_len_bytes.
     ocall_mechanism_status = ocall_onnx_run_inference(
         &ocall_actual_retval,
         session->host_onnx_session_handle,
@@ -104,7 +102,6 @@ oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle) {
         &ocall_actual_retval,
         session->host_onnx_session_handle);
 
-    // We proceed with cleanup even if OCALL fails
     g_enclave_sessions.erase(it);
 
     if (ocall_mechanism_status != OE_OK) return ocall_mechanism_status;
