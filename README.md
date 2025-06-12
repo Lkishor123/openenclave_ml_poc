@@ -19,6 +19,13 @@ python convert-bert.py distilbert-base-uncased-finetuned-sst-2-english \
 
 Copy the resulting `distilbert.ggml` into the `model/` directory of this repo.
 
+Before building the C++ components, clone the GGML and bert.cpp sources used by
+the project:
+
+```bash
+./scripts/download_deps.sh
+```
+
 ## Build
 
 Generate the enclave keys and edge routines:
