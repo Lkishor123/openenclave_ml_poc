@@ -15,15 +15,18 @@ target_sources(${HOST_APP_NAME} PRIVATE
 
 target_link_libraries(${HOST_APP_NAME} PRIVATE
     openenclave::oehost
-    ggml
+    bert
     stdc++fs
 )
 
 # Include Directories for Host:
 if(GLOBAL_GGML_INCLUDE_DIR AND EXISTS "${GLOBAL_GGML_INCLUDE_DIR}")
     target_include_directories(${HOST_APP_NAME} PRIVATE ${GLOBAL_GGML_INCLUDE_DIR})
+endif()
+if(GLOBAL_BERTCPP_INCLUDE_DIR AND EXISTS "${GLOBAL_BERTCPP_INCLUDE_DIR}")
+    target_include_directories(${HOST_APP_NAME} PRIVATE ${GLOBAL_BERTCPP_INCLUDE_DIR})
 else()
-    message(FATAL_ERROR "Host (${HOST_APP_NAME}): GLOBAL_GGML_INCLUDE_DIR not properly set or found. GGML headers will not be found.")
+    message(FATAL_ERROR "Host (${HOST_APP_NAME}): GLOBAL_BERTCPP_INCLUDE_DIR not properly set or found. bert.cpp headers will not be found.")
 endif()
 
 add_dependencies(${HOST_APP_NAME} GenerateEDL)
