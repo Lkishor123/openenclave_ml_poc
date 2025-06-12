@@ -3,7 +3,7 @@ set -euo pipefail
 
 mkdir -p model tokenizer
 
-# Download GGML DistilBERT model
+# Download GGML Distilbert model
 curl -L https://huggingface.co/mradermacher/distilbert-base-nli-mean-tokens-GGUF/resolve/main/distilbert-base-nli-mean-tokens.Q4_K_M.gguf -o model/bert.bin
 
 # Download tokenizer files
@@ -32,7 +32,10 @@ clone_repo() {
     git -C "$dest" checkout "$commit"
 }
 
-clone_repo "$GGML_REPO" "${EXTERNAL_DIR}/ggml" "$GGML_COMMIT"
+# Clone bert.cpp first
 clone_repo "$BERTCPP_REPO" "${EXTERNAL_DIR}/bert.cpp" "$BERTCPP_COMMIT"
+# MODIFIED: Clone ggml as a subdirectory of bert.cpp
+clone_repo "$GGML_REPO" "${EXTERNAL_DIR}/bert.cpp/ggml" "$GGML_COMMIT"
+
 
 echo "Dependencies downloaded to ${EXTERNAL_DIR}"
