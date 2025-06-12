@@ -33,10 +33,15 @@ void do_inference(oe_enclave_t* enclave, uint64_t session_handle, const std::str
     std::stringstream ss(line);
     std::string value_str;
     while(std::getline(ss, value_str, ',')) {
-        input_tensor_values.push_back(std::stoll(value_str));
+        // MODIFIED: Added a check to ensure the token string is not empty before parsing.
+        // This prevents the 'stoll' exception with malformed input.
+        if (!value_str.empty()) {
+            input_tensor_values.push_back(std::stoll(value_str));
+        }
     }
 
     if (input_tensor_values.empty()) {
+        std::cerr << "[Host] Warning: Received empty token list." << std::endl;
         return; // Skip empty lines
     }
 
