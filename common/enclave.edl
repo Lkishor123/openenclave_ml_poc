@@ -22,18 +22,22 @@ enclave {
 
     untrusted {
         oe_result_t ocall_onnx_load_model(
+            [out] oe_result_t* ocall_return_value,
             [out] uint64_t* host_session_handle,
             [in, size=model_data_len] const unsigned char* model_data,
             size_t model_data_len);
 
         oe_result_t ocall_onnx_run_inference(
-            uint64_t host_session_handle, 
-            [in, size=input_len] const void* input_data, 
+            [out] oe_result_t* ocall_return_value,
+            uint64_t host_session_handle,
+            [in, size=input_len] const void* input_data,
             size_t input_len,
-            [out, size=output_buf_len] void* output_data, 
+            [out, size=output_buf_len] void* output_data,
             size_t output_buf_len,
-            [out] size_t* actual_output_len); 
+            [out] size_t* actual_output_len);
 
-        oe_result_t ocall_onnx_release_session(uint64_t host_session_handle);
+        oe_result_t ocall_onnx_release_session(
+            [out] oe_result_t* ocall_return_value,
+            uint64_t host_session_handle);
     };
 };
