@@ -2,7 +2,7 @@
 
 ## Download Dependencies
 
-Run the helper script to download a prebuilt GGML model and tokenizer files:
+Run the helper script to download a prebuilt GGML model and tokenizer files. **Run this script before invoking CMake** so the build can locate `model/bert.bin`:
 
 ```bash
 scripts/download_deps.sh
@@ -17,12 +17,8 @@ The project uses the [GGML](https://github.com/ggml-org/ggml) library to run a
 BERT model inside an Open Enclave. The host application loads `bert.bin`, passes
 tokenized input to the enclave, and prints the resulting logits.
 
-Before building the C++ components, clone the GGML and bert.cpp sources used by
-the project:
-
-```bash
-./scripts/download_deps.sh
-```
+The script also clones the required GGML and bert.cpp repositories used during
+the build.
 
 ## Build
 
@@ -46,6 +42,7 @@ Configure and compile:
 cd openenclave_ml_poc
 mkdir build
 cd build
+# Run cmake after the model has been downloaded
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make
 make run

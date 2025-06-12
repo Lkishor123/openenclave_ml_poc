@@ -1,3 +1,5 @@
 onnx_env
 build/
 external/
+model/
+tokenizer/

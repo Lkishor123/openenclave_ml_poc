@@ -35,4 +35,4 @@ clone_repo() {
 clone_repo "$GGML_REPO" "${EXTERNAL_DIR}/ggml" "$GGML_COMMIT"
 clone_repo "$BERTCPP_REPO" "${EXTERNAL_DIR}/bert.cpp" "$BERTCPP_COMMIT"
 
-echo "Dependencies downloaded to ${EXTERNAL_DIR}" 
+echo "Dependencies downloaded to ${EXTERNAL_DIR}"
