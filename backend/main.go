@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,11 +29,10 @@ type RequestPayload struct {
 	Input string `json:"input"`
 }
 
-// MODIFIED: The response payload now includes a final Sentiment field.
 type ResponsePayload struct {
 	InputText  string    `json:"input_text"`
 	Sentiment  string    `json:"sentiment"`
-	Embeddings []float32 `json:"embeddings,omitempty"` // Kept for debugging, but not the primary result.
+	Embeddings []float32 `json:"embeddings,omitempty"`
 	Error      string    `json:"error,omitempty"`
 }
 
@@ -56,21 +54,24 @@ func startEnclaveWorker() (*EnclaveWorker, error) {
 		return nil, fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	// Capture stderr for better debugging
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	// MODIFIED: Correctly set up a pipe to continuously read from the worker's stderr.
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
 
 	log.Println("Starting C++ enclave worker...")
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start C++ worker: %w. Stderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("failed to start C++ worker: %w", err)
 	}
 	log.Println("C++ enclave worker started successfully.")
 
-	// Goroutine to log any errors from the C++ worker
+	// MODIFIED: This goroutine now continuously scans the stderr pipe and logs any output from the C++ worker.
+	// This will reveal why the worker is exiting after the first inference.
 	go func() {
-		scanner := bufio.NewScanner(&stderr)
+		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			log.Printf("[C++ Worker]: %s", scanner.Text())
+			log.Printf("[C++ Worker Stderr]: %s", scanner.Text())
 		}
 	}()
 
@@ -95,7 +96,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
 	pyCmd.Stdin = strings.NewReader(payload.Input)
 
-	var pyStdout, pyStderr bytes.Buffer
+	var pyStdout, pyStderr strings.Builder
 	pyCmd.Stdout = &pyStdout
 	pyCmd.Stderr = &pyStderr
 
@@ -111,7 +112,9 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	defer worker.mutex.Unlock()
 
 	if _, err := fmt.Fprintln(worker.stdin, tokenString); err != nil {
-		http.Error(w, "Failed to send data to C++ worker", http.StatusInternalServerError)
+		// This error happens when the C++ worker has already exited.
+		log.Printf("Error sending data to C++ worker: %v", err)
+		http.Error(w, "Failed to send data to C++ worker. The worker may have crashed.", http.StatusInternalServerError)
 		return
 	}
 
@@ -135,11 +138,9 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 4. Classify Sentiment ---
-	// A simple heuristic: calculate the average of the embedding vector.
-	// Positive average -> Positive sentiment, Negative average -> Negative sentiment.
 	average := sum / float64(len(embeddings))
 	var sentiment string
-	if average > 0.01 { // Using a small threshold to avoid neutral cases being classified.
+	if average > 0.01 {
 		sentiment = "Positive"
 	} else if average < -0.01 {
 		sentiment = "Negative"
@@ -152,7 +153,6 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	resp := ResponsePayload{
 		InputText: payload.Input,
 		Sentiment: sentiment,
-		// Embeddings: embeddings, // Optionally comment out to not send the full vector
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(&resp)
