@@ -1,4 +1,4 @@
-# openenclave_ml_poc/CMakeLists.txt (Root)
+# openenclave_ml_poc/CMakeLists.txt (Root) - CORRECTED
 cmake_minimum_required(VERSION 3.16)
 project(OpenEnclaveMLPoC CXX C)
 
@@ -71,8 +71,10 @@ set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(${GGML_SOURCE_DIR} external_ggml_build)
 
+# FIXED: Store the target name 'ggml' directly instead of trying to get its location.
 set(GLOBAL_GGML_LIBRARY ggml CACHE INTERNAL "GGML library target")
-set(GLOBAL_GGML_LIBRARY ${GGML_LIBRARY} CACHE INTERNAL "GGML library path")
+set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
+
 
 # --- Build bert.cpp from external directory ---
 set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
@@ -80,6 +82,7 @@ if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
 endif()
 
+# FIXED: Prevent bert.cpp from building its own instance of ggml.
 set(BERT_STANDALONE ON CACHE BOOL "" FORCE)
 add_subdirectory(${BERTCPP_SOURCE_DIR} external_bertcpp_build)
 set(GLOBAL_BERTCPP_INCLUDE_DIR ${BERTCPP_SOURCE_DIR} CACHE INTERNAL "bert.cpp include directory")
