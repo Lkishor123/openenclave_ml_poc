@@ -17,6 +17,13 @@ The project uses the [GGML](https://github.com/ggml-org/ggml) library to run a
 BERT model inside an Open Enclave. The host application loads `bert.bin`, passes
 tokenized input to the enclave, and prints the resulting logits.
 
+Before building the C++ components, clone the GGML and bert.cpp sources used by
+the project:
+
+```bash
+./scripts/download_deps.sh
+```
+
 ## Build
 
 Generate the enclave keys and edge routines:
