@@ -12,9 +12,20 @@ fi
 mkdir -p model tokenizer
 
 # --- Model Download ---
+# REVERTED: Reverted to using a simple curl command with the correct, direct download link
 # for the model file. The -L flag handles redirects.
 echo "Downloading compatible model..."
 curl -L https://huggingface.co/CompendiumLabs/bge-base-en-v1.5-gguf/resolve/main/bge-base-en-v1.5-q4_k_m.gguf -o model/bert.bin
+
+# MODIFIED: Added a check to ensure the model file was downloaded correctly.
+MODEL_SIZE_THRESHOLD=1000000 # 1MB
+MODEL_SIZE=$(stat -c%s "model/bert.bin")
+if [ "$MODEL_SIZE" -lt "$MODEL_SIZE_THRESHOLD" ]; then
+    echo "Error: Downloaded model file is too small ($MODEL_SIZE bytes)."
+    echo "This might be an HTML error page instead of the model. Please check the URL."
+    exit 1
+fi
+echo "Model downloaded successfully."
 
 
 # --- Tokenizer Download ---
@@ -31,13 +42,12 @@ echo "Dependencies downloaded to $(pwd)/model and $(pwd)/tokenizer"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EXTERNAL_DIR="${ROOT_DIR}/external"
 BERTCPP_REPO="https://github.com/ggerganov/bert.cpp.git"
-# This commit is known to work with the submodule structure
-BERTCPP_COMMIT="b4330a33a82c8abe6b37e8c37223de84a7d30a6c"
+# MODIFIED: Removed the specific commit hash to use the latest version from the main branch.
 
 mkdir -p "${EXTERNAL_DIR}"
 
 # --- Robust Git Checkout and Submodule Initialization ---
-echo "Cloning and setting up bert.cpp and its ggml submodule..."
+echo "Cloning and setting up the LATEST version of bert.cpp and its ggml submodule..."
 BERTCPP_DIR="${EXTERNAL_DIR}/bert.cpp"
 if [ ! -d "$BERTCPP_DIR/.git" ]; then
     git clone "$BERTCPP_REPO" "$BERTCPP_DIR"
@@ -45,7 +55,10 @@ fi
 # Change into the directory to run subsequent git commands reliably
 cd "$BERTCPP_DIR"
 git fetch --all
-git checkout "$BERTCPP_COMMIT"
+# MODIFIED: Checkout the main branch to get the latest version and ensure it's up-to-date.
+git checkout main
+git pull origin main
+# This ensures the correct version of ggml is used by initializing the submodule AFTER checkout
 git submodule update --init --recursive
 cd "$ROOT_DIR" # Return to the project root
 
