@@ -21,14 +21,14 @@ enclave {
     };
 
     untrusted {
-        oe_result_t ocall_onnx_load_model(
+        oe_result_t ocall_ggml_load_model(
             [out] oe_result_t* ocall_host_ret,
             [out] oe_result_t* host_return_value,
             [out] uint64_t* host_session_handle,
             [in, size=model_data_len] const unsigned char* model_data,
             size_t model_data_len);
 
-        oe_result_t ocall_onnx_run_inference(
+        oe_result_t ocall_ggml_run_inference(
             [out] oe_result_t* ocall_host_ret,
             [out] oe_result_t* host_return_value,
             uint64_t host_session_handle,
@@ -38,7 +38,7 @@ enclave {
             size_t output_buf_len,
             [out] size_t* actual_output_len);
 
-        oe_result_t ocall_onnx_release_session(
+        oe_result_t ocall_ggml_release_session(
             [out] oe_result_t* ocall_host_ret,
             [out] oe_result_t* host_return_value,
             uint64_t host_session_handle);
