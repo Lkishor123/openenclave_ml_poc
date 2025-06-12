@@ -15,7 +15,7 @@ target_sources(${HOST_APP_NAME} PRIVATE
 
 target_link_libraries(${HOST_APP_NAME} PRIVATE
     openenclave::oehost
-    ${GLOBAL_GGML_LIBRARY}
+    ggml
     stdc++fs
 )
 

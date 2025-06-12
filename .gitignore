@@ -1,1 +1,3 @@
 onnx_env
+build/
+external/

@@ -59,31 +59,20 @@ else()
     message(STATUS "  [ROOT DIAG] CMake target 'openenclave::oeedger8r' IS defined.")
 endif()
 
-# --- Find GGML ---
-option(GGML_ROOT_DIR "Root directory of the GGML library and headers" "/opt/ggml")
-message(STATUS "Attempting to use GGML_ROOT_DIR: ${GGML_ROOT_DIR} (This can be overridden with -D parameter)")
+# --- Build GGML from external directory ---
+set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
+set(GGML_SOURCE_DIR ${EXTERNAL_DIR}/ggml)
 
-set(GGML_INCLUDE_DIR "${GGML_ROOT_DIR}/include")
-set(GGML_LIBRARY_DIR "${GGML_ROOT_DIR}/lib")
-
-if(NOT EXISTS "${GGML_ROOT_DIR}")
-    message(FATAL_ERROR "GGML_ROOT_DIR '${GGML_ROOT_DIR}' does not exist.")
-endif()
-if(NOT EXISTS "${GGML_INCLUDE_DIR}/ggml.h")
-    message(FATAL_ERROR "GGML header 'ggml.h' not found in ${GGML_INCLUDE_DIR}.")
+if(NOT EXISTS "${GGML_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "GGML source not found at ${GGML_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
 endif()
 
-find_library(GGML_LIBRARY NAMES ggml PATHS "${GGML_LIBRARY_DIR}" NO_DEFAULT_PATH)
-if(NOT GGML_LIBRARY)
-    find_library(GGML_LIBRARY NAMES ggml PATHS "${GGML_LIBRARY_DIR}")
-    if(NOT GGML_LIBRARY)
-        message(FATAL_ERROR "libggml not found in ${GGML_LIBRARY_DIR}.")
-    endif()
-endif()
-message(STATUS "  GGML Include Dir: ${GGML_INCLUDE_DIR}")
-message(STATUS "  GGML Library: ${GGML_LIBRARY}")
+set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(${GGML_SOURCE_DIR} external_ggml_build)
 
-set(GLOBAL_GGML_INCLUDE_DIR ${GGML_INCLUDE_DIR} CACHE INTERNAL "GGML include directory")
+get_target_property(GGML_LIBRARY ggml LOCATION)
+set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
 set(GLOBAL_GGML_LIBRARY ${GGML_LIBRARY} CACHE INTERNAL "GGML library path")
 
 # --- EDL File Processing ---
