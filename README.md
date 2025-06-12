@@ -2,7 +2,7 @@
 
 ## Download Dependencies
 
-Run the helper script to download a prebuilt GGML model and tokenizer files. **Run this script before invoking CMake** so the build can locate `model/bert.bin`:
+Run `scripts/download_deps.sh` to fetch a prebuilt GGML model and tokenizer. **Run this script before invoking CMake** so the build can locate `model/bert.bin`:
 
 ```bash
 scripts/download_deps.sh
@@ -12,7 +12,8 @@ After the script finishes you will have `model/bert.bin` and a
 `tokenizer/` directory containing the tokenizer configuration.
 
 All components—including the Go backend and Docker image—expect the
-model to reside at this unified path.
+model to reside at this unified path. The backend and Docker setup now
+look for the model exclusively at this path.
 
 ### Architecture Overview
 
@@ -45,18 +46,18 @@ Configure and compile:
 cd openenclave_ml_poc
 mkdir build
 cd build
-# Run cmake after the model has been downloaded
-cmake .. -DCMAKE_BUILD_TYPE=Debug
+# Ensure scripts/download_deps.sh has been run so model/bert.bin exists
+cmake .. -DGGML_ROOT_DIR=/opt/ggml -DCMAKE_BUILD_TYPE=Debug
 make
 make run
 ```
 
-### Running the Host Manually
+### Run Host
 
-After building, you can test the GGML path directly:
+From the `build` directory you can directly invoke the host binary:
 
 ```bash
-./build/host/ml_host_prod_go model/bert.bin enclave/enclave_prod.signed.so --use-stdin
+./host/ml_host_prod_go ../model/bert.bin ../enclave/enclave_prod.signed.so --use-stdin
 ```
 
 ## Docker Build
