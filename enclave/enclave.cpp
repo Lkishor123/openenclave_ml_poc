@@ -1,4 +1,4 @@
-/* enclave/enclave.cpp - FINAL CORRECTED VERSION */
+/* enclave/enclave.cpp - FINAL, SYNCHRONIZED VERSION */
 #include <stdio.h>
 #include <string.h>
 #include <vector>
