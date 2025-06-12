@@ -7,7 +7,7 @@
 #include <map>
 #include <sstream>
 #include <cstring>
-#include <unistd.h>
+#include <unistd.h> // Required for the _exit() call
 
 #include <openenclave/host.h>
 #include <openenclave/bits/result.h>
@@ -26,45 +26,6 @@
 static std::map<uint64_t, bert_ctx*> g_sessions;
 static uint64_t g_next_session_handle = 1;
 static std::string g_model_path;
-
-// Helper function to perform inference. This will be called inside the main loop.
-void process_inference(oe_enclave_t* enclave, uint64_t session_handle, const std::string& line) {
-    std::vector<int64_t> input_tensor_values;
-    std::stringstream ss(line);
-    std::string value_str;
-    while(std::getline(ss, value_str, ',')) {
-        // FIXED: Added a check to ensure the token string is not empty before parsing.
-        // This prevents the 'stoll' exception with malformed input.
-        if (!value_str.empty()) {
-            input_tensor_values.push_back(std::stoll(value_str));
-        }
-    }
-
-    if (input_tensor_values.empty()) {
-        std::cerr << "[Host] Warning: Received empty token list." << std::endl;
-        return; // Skip empty lines
-    }
-
-    size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
-    std::vector<float> output_tensor_values(768); // typical embedding size
-    size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
-    size_t actual_output_byte_size = 0;
-    oe_result_t ecall_ret_status;
-
-    OE_HOST_CHECK(enclave_infer(
-        enclave, &ecall_ret_status, session_handle,
-        input_tensor_values.data(), input_data_byte_size,
-        output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer");
-    OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
-
-    size_t output_elements = actual_output_byte_size / sizeof(float);
-    for (size_t i = 0; i < output_elements; ++i) {
-        std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
-    }
-    // Flush stdout to ensure the parent Go process receives the output immediately.
-    std::cout << std::endl;
-}
-
 
 std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     if (!std::filesystem::exists(filepath)) {
@@ -181,60 +142,73 @@ oe_result_t ocall_ggml_release_session(
 
 int main(int argc, char* argv[]) {
     oe_enclave_t* enclave = nullptr;
+    int host_app_ret_val = 1;
     uint64_t enclave_ml_session_handle = 0;
 
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <model_path> <enclave_path> [--simulate]" << std::endl;
         return 1;
     }
     g_model_path = argv[1];
     const std::string enclave_filepath = argv[2];
+    bool use_stdin = false;
     bool simulate = false;
-    if (argc > 3 && std::string(argv[3]) == "--simulate") {
-        simulate = true;
+    for (int i = 3; i < argc; ++i) {
+        if (std::string(argv[i]) == "--use-stdin") use_stdin = true;
+        else if (std::string(argv[i]) == "--simulate") simulate = true;
     }
 
     try {
-        // --- 1. One-time Setup ---
-        // Load the model and initialize the enclave once at startup.
         uint32_t enclave_flags = OE_ENCLAVE_FLAG_DEBUG;
         if (simulate) enclave_flags |= OE_ENCLAVE_FLAG_SIMULATE;
         OE_HOST_CHECK(oe_create_enclave_enclave(
             enclave_filepath.c_str(), OE_ENCLAVE_TYPE_AUTO,
             enclave_flags, nullptr, 0, &enclave), "oe_create_enclave_enclave");
-        
         std::vector<unsigned char> model_buffer = load_file_to_buffer(g_model_path);
         oe_result_t ecall_ret_status;
         OE_HOST_CHECK(initialize_enclave_ml_context(
             enclave, &ecall_ret_status, model_buffer.data(),
             model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context");
         OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave)");
-        
-        std::cerr << "[Host] Worker ready. Waiting for input on stdin." << std::endl;
 
-        // --- 2. Main Processing Loop ---
-        // Continuously read lines from stdin, process them, and write results to stdout.
-        std::string line;
-        while (std::getline(std::cin, line)) {
-            if (line.empty()) {
-                continue;
+        std::vector<int64_t> input_tensor_values;
+        if (use_stdin) {
+            std::string line;
+            std::getline(std::cin, line);
+            std::stringstream ss(line);
+            std::string value_str;
+            while(std::getline(ss, value_str, ',')) {
+                if (!value_str.empty()){
+                    input_tensor_values.push_back(std::stoll(value_str));
+                }
             }
-            process_inference(enclave, enclave_ml_session_handle, line);
         }
 
+        size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
+        std::vector<float> output_tensor_values(768); // typical embedding size
+        size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
+        size_t actual_output_byte_size = 0;
+        OE_HOST_CHECK(enclave_infer(
+            enclave, &ecall_ret_status, enclave_ml_session_handle,
+            input_tensor_values.data(), input_data_byte_size,
+            output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer");
+        OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
+        size_t output_elements = actual_output_byte_size / sizeof(float);
+        for (size_t i = 0; i < output_elements; ++i) {
+            std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
+        }
+        std::cout << std::endl;
+
+        // Exit immediately and successfully after printing the output.
+        // This bypasses the crashing libc cleanup routines.
+        _exit(0);
+
     } catch (const std::exception& e) {
-        std::cerr << "[Host] Exception caught: " << e.what() << std::endl;
-        return 1;
+        std::cerr << "Host exception: " << e.what() << std::endl;
+        host_app_ret_val = 1;
     }
     
-    // --- 3. Final Cleanup ---
-    // This code is reached when the parent process (Go backend) closes the stdin pipe.
-    std::cerr << "[Host] Stdin closed. Shutting down." << std::endl;
-    if (enclave) {
-        oe_result_t ecall_ret_status;
-        terminate_enclave_ml_context(enclave, &ecall_ret_status, enclave_ml_session_handle);
-        oe_terminate_enclave(enclave);
-    }
+    // The following lines are now effectively unreachable but are kept for completeness.
+    if (enclave) oe_terminate_enclave(enclave);
     
-    return 0;
+    return host_app_ret_val;
 }
