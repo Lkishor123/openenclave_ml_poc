@@ -17,19 +17,20 @@ target_sources(${ENCLAVE_NAME} PRIVATE
 # Link the enclave executable against the required Open Enclave libraries.
 target_link_libraries(${ENCLAVE_NAME} PRIVATE
     openenclave::oeenclave
-    openenclave::oelibcxx         
-    openenclave::oecryptombedtls  
+    openenclave::oelibcxx
+    openenclave::oecryptombedtls
+    ${GLOBAL_GGML_LIBRARY}
 )
 
 # Add Include Directories:
 # OpenEnclave_INCLUDE_DIRS should be globally available from root CMakeLists.txt's include_directories()
 # GLOBAL_OpenEnclave_INCLUDE_DIRS is also available if needed for direct use.
 
-# ONNX Runtime headers for the enclave (if enclave needs to parse ONNX structures or data types)
-if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
-    target_include_directories(${ENCLAVE_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
+# GGML headers for the enclave
+if(GLOBAL_GGML_INCLUDE_DIR AND EXISTS "${GLOBAL_GGML_INCLUDE_DIR}")
+    target_include_directories(${ENCLAVE_NAME} PRIVATE ${GLOBAL_GGML_INCLUDE_DIR})
 else()
-    message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not properly set or found. ONNX headers might not be found if enclave.cpp uses them.")
+    message(WARNING "Enclave (${ENCLAVE_NAME}): GLOBAL_GGML_INCLUDE_DIR not properly set or found. GGML headers might not be found if enclave.cpp uses them.")
 endif()
 
 add_dependencies(${ENCLAVE_NAME} GenerateEDL)

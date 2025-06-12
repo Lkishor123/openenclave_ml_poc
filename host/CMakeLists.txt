@@ -15,15 +15,15 @@ target_sources(${HOST_APP_NAME} PRIVATE
 
 target_link_libraries(${HOST_APP_NAME} PRIVATE
     openenclave::oehost
-    ${GLOBAL_ONNXRUNTIME_LIBRARY}
+    ${GLOBAL_GGML_LIBRARY}
     stdc++fs
 )
 
 # Include Directories for Host:
-if(GLOBAL_ONNXRUNTIME_INCLUDE_DIR AND EXISTS "${GLOBAL_ONNXRUNTIME_INCLUDE_DIR}")
-    target_include_directories(${HOST_APP_NAME} PRIVATE ${GLOBAL_ONNXRUNTIME_INCLUDE_DIR})
+if(GLOBAL_GGML_INCLUDE_DIR AND EXISTS "${GLOBAL_GGML_INCLUDE_DIR}")
+    target_include_directories(${HOST_APP_NAME} PRIVATE ${GLOBAL_GGML_INCLUDE_DIR})
 else()
-    message(FATAL_ERROR "Host (${HOST_APP_NAME}): GLOBAL_ONNXRUNTIME_INCLUDE_DIR not properly set or found. ONNX headers will not be found.")
+    message(FATAL_ERROR "Host (${HOST_APP_NAME}): GLOBAL_GGML_INCLUDE_DIR not properly set or found. GGML headers will not be found.")
 endif()
 
 add_dependencies(${HOST_APP_NAME} GenerateEDL)
@@ -38,15 +38,15 @@ set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}
 
 set(MODEL_PATH_FOR_RUN_TARGET "${CMAKE_BINARY_DIR}/model/model.ggml")
 
-get_filename_component(HOST_ONNX_LIB_DIR ${GLOBAL_ONNXRUNTIME_LIBRARY} DIRECTORY)
+get_filename_component(HOST_GGML_LIB_DIR ${GLOBAL_GGML_LIBRARY} DIRECTORY)
 
-message(STATUS "[Host CMake] ONNX Runtime Library Directory for LD_LIBRARY_PATH: ${HOST_ONNX_LIB_DIR}")
+message(STATUS "[Host CMake] GGML Library Directory for LD_LIBRARY_PATH: ${HOST_GGML_LIB_DIR}")
 message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_PATH_FOR_RUN_TARGET}")
 
 # 2. Updated the 'run' target to work with the new stdin-based host
 # This now pipes a sample input string to the executable for testing.
 add_custom_target(run
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_PATH_FOR_RUN_TARGET}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
@@ -54,7 +54,7 @@ add_custom_target(run
 )
 
 add_custom_target(run_simulate
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_ONNX_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
+    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${HOST_GGML_LIB_DIR}" bash -c "echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
     COMMENT "Running ML PoC in SIMULATION mode."

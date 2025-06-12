@@ -76,7 +76,7 @@ RUN rm -rf build && mkdir build && \
     /opt/openenclave/bin/oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated --search-path /opt/openenclave/include && \
     cd build && \
     . /opt/openenclave/share/openenclave/openenclaverc && \
-    cmake .. && \
+    cmake .. -DGGML_ROOT_DIR=/opt/ggml && \
     make
 
 # Stage 2: Build the Go Backend
