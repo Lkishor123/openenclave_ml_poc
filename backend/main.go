@@ -1,50 +1,177 @@
 package main
 
 import (
-        "bytes"
-        "encoding/json"
-        "fmt"
-        "log"
-        "net/http"
-        "os"
-        "os/exec"
-        "strconv"
-        "strings"
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
 )
 
-// Global model config instance
-var modelConfig ModelConfig
-
-// Struct to parse the model's config.json
-type ModelConfig struct {
-	ID2Label map[string]string `json:"id2label"`
+// EnclaveWorker manages the long-running C++ worker process.
+type EnclaveWorker struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Scanner
+	mutex  sync.Mutex // Ensures only one request is processed at a time.
 }
 
-// Structs for communicating with the UI
+// Global instance of our worker.
+var worker *EnclaveWorker
+
+// Structs for UI communication.
 type RequestPayload struct {
 	Input string `json:"input"`
 }
+
+// MODIFIED: The response payload now includes a final Sentiment field.
 type ResponsePayload struct {
-	InputText      string `json:"input_text"`
-	PredictedLabel string `json:"predicted_label"`
-	Error          string `json:"error,omitempty"`
+	InputText  string    `json:"input_text"`
+	Sentiment  string    `json:"sentiment"`
+	Embeddings []float32 `json:"embeddings,omitempty"` // Kept for debugging, but not the primary result.
+	Error      string    `json:"error,omitempty"`
+}
+
+// Starts the C++ worker process and sets up pipes for communication.
+func startEnclaveWorker() (*EnclaveWorker, error) {
+	hostAppPath := "./ml_host_prod_go"
+	modelPath := "./model/bert.bin"
+	enclavePath := "./enclave/enclave_prod.signed.so"
+
+	cmd := exec.Command(hostAppPath, modelPath, enclavePath)
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+
+	// Capture stderr for better debugging
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	log.Println("Starting C++ enclave worker...")
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start C++ worker: %w. Stderr: %s", err, stderr.String())
+	}
+	log.Println("C++ enclave worker started successfully.")
+
+	// Goroutine to log any errors from the C++ worker
+	go func() {
+		scanner := bufio.NewScanner(&stderr)
+		for scanner.Scan() {
+			log.Printf("[C++ Worker]: %s", scanner.Text())
+		}
+	}()
+
+	return &EnclaveWorker{
+		cmd:    cmd,
+		stdin:  stdin,
+		stdout: bufio.NewScanner(stdout),
+		mutex:  sync.Mutex{},
+	}, nil
+}
+
+// The main inference handler.
+func handleInference(w http.ResponseWriter, r *http.Request) {
+	var payload RequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// --- 1. Tokenization (as a short-lived process) ---
+	tokenizerDir := "./tokenizer"
+	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
+	pyCmd.Stdin = strings.NewReader(payload.Input)
+
+	var pyStdout, pyStderr bytes.Buffer
+	pyCmd.Stdout = &pyStdout
+	pyCmd.Stderr = &pyStderr
+
+	if err := pyCmd.Run(); err != nil {
+		log.Printf("Python script error: %s", pyStderr.String())
+		http.Error(w, fmt.Sprintf("Tokenization failed: %s", pyStderr.String()), http.StatusInternalServerError)
+		return
+	}
+	tokenString := strings.TrimSpace(pyStdout.String())
+
+	// --- 2. Inference via C++ Worker ---
+	worker.mutex.Lock()
+	defer worker.mutex.Unlock()
+
+	if _, err := fmt.Fprintln(worker.stdin, tokenString); err != nil {
+		http.Error(w, "Failed to send data to C++ worker", http.StatusInternalServerError)
+		return
+	}
+
+	if !worker.stdout.Scan() {
+		if err := worker.stdout.Err(); err != nil {
+			log.Printf("Error reading from C++ worker stdout: %v", err)
+		}
+		http.Error(w, "Failed to read data from C++ worker", http.StatusInternalServerError)
+		return
+	}
+	resultString := worker.stdout.Text()
+
+	// --- 3. Process the output ---
+	outputParts := strings.Split(strings.TrimSpace(resultString), ",")
+	embeddings := make([]float32, len(outputParts))
+	var sum float64
+	for i, part := range outputParts {
+		val, _ := strconv.ParseFloat(strings.TrimSpace(part), 64)
+		embeddings[i] = float32(val)
+		sum += val
+	}
+
+	// --- 4. Classify Sentiment ---
+	// A simple heuristic: calculate the average of the embedding vector.
+	// Positive average -> Positive sentiment, Negative average -> Negative sentiment.
+	average := sum / float64(len(embeddings))
+	var sentiment string
+	if average > 0.01 { // Using a small threshold to avoid neutral cases being classified.
+		sentiment = "Positive"
+	} else if average < -0.01 {
+		sentiment = "Negative"
+	} else {
+		sentiment = "Neutral"
+	}
+	log.Printf("Input: '%s', Sentiment: %s (Avg: %f)", payload.Input, sentiment, average)
+
+	// --- 5. Send Final Response ---
+	resp := ResponsePayload{
+		InputText: payload.Input,
+		Sentiment: sentiment,
+		// Embeddings: embeddings, // Optionally comment out to not send the full vector
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(&resp)
 }
 
 func main() {
-
-	// Load the model config at startup (we still need this)
-    configPath := "./distilbert-sst2-ggml/config.json"
-	configFile, err := os.ReadFile(configPath)
+	var err error
+	worker, err = startEnclaveWorker()
 	if err != nil {
-		log.Fatalf("Failed to read model config from '%s': %v", configPath, err)
+		log.Fatalf("FATAL: Could not start the enclave worker process: %v", err)
 	}
-	err = json.Unmarshal(configFile, &modelConfig)
-	if err != nil {
-		log.Fatalf("Failed to parse model config: %v", err)
-	}
-	log.Println("Model config loaded successfully.")
+	defer func() {
+		log.Println("Closing stdin to C++ worker...")
+		worker.stdin.Close()
+		log.Println("Waiting for C++ worker to exit...")
+		worker.cmd.Wait()
+		log.Println("C++ worker exited.")
+	}()
 
-	// Serve the frontend static files and the API endpoint
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
 	http.HandleFunc("/infer", handleInference)
@@ -53,79 +180,4 @@ func main() {
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-}
-
-func handleInference(w http.ResponseWriter, r *http.Request) {
-	var payload RequestPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// --- 1. Call Python script for tokenization ---
-    tokenizerDir := "./distilbert-sst2-ggml"
-	// Execute `python3 tokenize_script.py <tokenizer_directory>`
-	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
-	// Pass the input text from the UI to the Python script's standard input
-	pyCmd.Stdin = strings.NewReader(payload.Input)
-
-	var pyStdout, pyStderr bytes.Buffer
-	pyCmd.Stdout = &pyStdout
-	pyCmd.Stderr = &pyStderr
-
-	err := pyCmd.Run()
-	if err != nil {
-		log.Printf("Python script error: %s", pyStderr.String())
-		http.Error(w, fmt.Sprintf("Tokenization failed: %s", pyStderr.String()), http.StatusInternalServerError)
-		return
-	}
-
-	inputStringForCpp := strings.TrimSpace(pyStdout.String())
-	// ---
-
-	// 2. Execute the C++ host application as a subprocess
-	hostAppPath := "./ml_host_prod_go"
-    modelPath := "./model/bert.bin"
-	enclavePath := "./enclave/enclave_prod.signed.so"
-
-	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
-	cppCmd.Stdin = strings.NewReader(inputStringForCpp)
-
-	var cppStdout, cppStderr bytes.Buffer
-	cppCmd.Stdout = &cppStdout
-	cppCmd.Stderr = &cppStderr
-
-	runErr := cppCmd.Run()
-	if runErr != nil {
-		log.Printf("Host app stderr: %s", cppStderr.String())
-		http.Error(w, fmt.Sprintf("Inference failed: %s", cppStderr.String()), http.StatusInternalServerError)
-		return
-	}
-
-	// 3. Process the output (logits) from the C++ app
-	outputParts := strings.Split(strings.TrimSpace(cppStdout.String()), ",")
-	logits := make([]float32, len(outputParts))
-	for i, part := range outputParts {
-		val, _ := strconv.ParseFloat(strings.TrimSpace(part), 32)
-		logits[i] = float32(val)
-	}
-
-	var maxLogit float32 = -1e9
-	var predictedIndex int = 0
-	for i, logit := range logits {
-		if logit > maxLogit {
-			maxLogit = logit
-			predictedIndex = i
-		}
-	}
-
-	predictedLabel := modelConfig.ID2Label[strconv.Itoa(predictedIndex)]
-
-	// 4. Send the final, human-readable result to the UI
-	resp := ResponsePayload{
-		InputText:      payload.Input,
-		PredictedLabel: predictedLabel,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(&resp)
 }
