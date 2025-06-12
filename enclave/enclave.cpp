@@ -31,20 +31,14 @@ oe_result_t initialize_enclave_ml_context(
     }
 
     oe_result_t ocall_mechanism_status = OE_FAILURE;
-    oe_result_t ocall_actual_retval = OE_FAILURE; // To store the return value of the host-side OCALL
     uint64_t host_session_handle = 0;
 
     ENCLAVE_LOG("INFO", "OCALL: Requesting host to load ONNX model (%zu bytes).", model_size);
-    // Pass address for the actual OCALL return value as the first argument
-    ocall_mechanism_status = ocall_onnx_load_model(&ocall_actual_retval, &host_session_handle, model_data, model_size);
+    ocall_mechanism_status = ocall_onnx_load_model(&host_session_handle, model_data, model_size);
 
     if (ocall_mechanism_status != OE_OK) {
-        ENCLAVE_LOG("ERROR", "OCALL mechanism for ocall_onnx_load_model failed with %s.", oe_result_str(ocall_mechanism_status));
-        return ocall_mechanism_status; // Error in OCALL dispatch itself
-    }
-    if (ocall_actual_retval != OE_OK) {
-        ENCLAVE_LOG("ERROR", "Host-side ocall_onnx_load_model failed with %s.", oe_result_str(ocall_actual_retval));
-        return ocall_actual_retval; // Error from host OCALL implementation
+        ENCLAVE_LOG("ERROR", "ocall_onnx_load_model failed with %s.", oe_result_str(ocall_mechanism_status));
+        return ocall_mechanism_status;
     }
 
     if (host_session_handle == 0) { 
@@ -90,29 +84,22 @@ oe_result_t enclave_infer(
 
     enclave_ml_session_t* session = &it->second;
     oe_result_t ocall_mechanism_status = OE_FAILURE;
-    oe_result_t ocall_actual_retval = OE_FAILURE;
 
     ENCLAVE_LOG("INFO", "OCALL: Requesting host to run inference for host handle %lu.", (unsigned long)session->host_onnx_session_handle);
     ocall_mechanism_status = ocall_onnx_run_inference(
-        &ocall_actual_retval, // Pass address for the actual OCALL return value
         session->host_onnx_session_handle,
-        input_data,                     
+        input_data,
         input_data_byte_size,
-        output_buffer,                  
+        output_buffer,
         output_buffer_size_bytes,
-        actual_output_size_bytes_out); 
+        actual_output_size_bytes_out);
 
     if (ocall_mechanism_status != OE_OK) {
-        ENCLAVE_LOG("ERROR", "OCALL mechanism for ocall_run_onnx_inference failed with %s.", oe_result_str(ocall_mechanism_status));
-        return ocall_mechanism_status;
-    }
-    if (ocall_actual_retval != OE_OK) {
-        ENCLAVE_LOG("ERROR", "Host-side ocall_run_onnx_inference failed with %s.", oe_result_str(ocall_actual_retval));
-        // Special handling for OE_BUFFER_TOO_SMALL from host
-        if (ocall_actual_retval == OE_BUFFER_TOO_SMALL) {
-            return OE_BUFFER_TOO_SMALL; 
+        ENCLAVE_LOG("ERROR", "ocall_onnx_run_inference failed with %s.", oe_result_str(ocall_mechanism_status));
+        if (ocall_mechanism_status == OE_BUFFER_TOO_SMALL) {
+            return OE_BUFFER_TOO_SMALL;
         }
-        return ocall_actual_retval;
+        return ocall_mechanism_status;
     }
 
     ENCLAVE_LOG("INFO", "Host inference successful. Actual output size: %zu bytes.", *actual_output_size_bytes_out);
@@ -135,17 +122,12 @@ oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle) {
 
     enclave_ml_session_t* session = &it->second;
     oe_result_t ocall_mechanism_status = OE_FAILURE;
-    oe_result_t ocall_actual_retval = OE_FAILURE;
 
     ENCLAVE_LOG("INFO", "OCALL: Requesting host to release ONNX session for host handle %lu.", (unsigned long)session->host_onnx_session_handle);
-    ocall_mechanism_status = ocall_onnx_release_session(&ocall_actual_retval, session->host_onnx_session_handle);
+    ocall_mechanism_status = ocall_onnx_release_session(session->host_onnx_session_handle);
 
     if (ocall_mechanism_status != OE_OK) {
-        ENCLAVE_LOG("ERROR", "OCALL mechanism for ocall_onnx_release_session failed with %s.", oe_result_str(ocall_mechanism_status));
-        // Continue to erase local session data
-    } else if (ocall_actual_retval != OE_OK) {
-        ENCLAVE_LOG("ERROR", "Host-side ocall_onnx_release_session failed with %s.", oe_result_str(ocall_actual_retval));
-        // Continue to erase local session data
+        ENCLAVE_LOG("ERROR", "ocall_onnx_release_session failed with %s.", oe_result_str(ocall_mechanism_status));
     } else {
         ENCLAVE_LOG("INFO", "Host released ONNX session successfully.");
     }
