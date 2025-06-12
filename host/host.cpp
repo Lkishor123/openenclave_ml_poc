@@ -36,7 +36,7 @@ static const OrtApi* g_ort_api = nullptr;
     } while (0)
 
 static OrtEnv* g_host_ort_env = nullptr;
-static std::map<uint64_t, OrtSession*> g_host_onnx_sessions;
+static std::map<uint64_t, OrtSession*> g_host_ggml_sessions;
 static uint64_t g_next_host_session_handle = 1;
 
 std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
@@ -78,7 +78,7 @@ oe_result_t ocall_ggml_load_model(
         ORT_CHECK(g_ort_api->CreateSessionFromArray(g_host_ort_env, model_data, model_data_len, session_options, &session));
         if (session_options) g_ort_api->ReleaseSessionOptions(session_options);
         uint64_t current_host_handle = g_next_host_session_handle++;
-        g_host_onnx_sessions[current_host_handle] = session;
+        g_host_ggml_sessions[current_host_handle] = session;
         *host_session_handle_out = current_host_handle;
         *host_return_value = OE_OK;
     } catch (const std::exception& e) {
@@ -102,8 +102,8 @@ oe_result_t ocall_ggml_run_inference(
     *ocall_host_ret = OE_FAILURE;
     *host_return_value = OE_FAILURE;
     try {
-        auto it = g_host_onnx_sessions.find(host_session_handle);
-        if (it == g_host_onnx_sessions.end()) {
+        auto it = g_host_ggml_sessions.find(host_session_handle);
+        if (it == g_host_ggml_sessions.end()) {
             *host_return_value = OE_NOT_FOUND;
             *ocall_host_ret = OE_OK;
             return OE_OK;
@@ -163,10 +163,10 @@ oe_result_t ocall_ggml_release_session(
         return OE_INVALID_PARAMETER;
     *ocall_host_ret = OE_FAILURE;
     *host_return_value = OE_FAILURE;
-    auto it = g_host_onnx_sessions.find(host_session_handle);
-    if (it != g_host_onnx_sessions.end()) {
+    auto it = g_host_ggml_sessions.find(host_session_handle);
+    if (it != g_host_ggml_sessions.end()) {
         if (it->second) g_ort_api->ReleaseSession(it->second);
-        g_host_onnx_sessions.erase(it);
+        g_host_ggml_sessions.erase(it);
         *host_return_value = OE_OK;
     } else {
         *host_return_value = OE_NOT_FOUND;

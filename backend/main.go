@@ -31,8 +31,17 @@ type ResponsePayload struct {
 
 func main() {
 
-	// Hard-code label mapping instead of reading config file
-	modelConfig.ID2Label = map[string]string{"0": "NEGATIVE", "1": "POSITIVE"}
+	// Load the model config at startup (we still need this)
+    configPath := "./distilbert-sst2-ggml/config.json"
+	configFile, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Fatalf("Failed to read model config from '%s': %v", configPath, err)
+	}
+	err = json.Unmarshal(configFile, &modelConfig)
+	if err != nil {
+		log.Fatalf("Failed to parse model config: %v", err)
+	}
+	log.Println("Model config loaded successfully.")
 
 	// Serve the frontend static files and the API endpoint
 	fs := http.FileServer(http.Dir("./frontend"))
@@ -53,7 +62,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 1. Call Python script for tokenization ---
-	tokenizerDir := "distilbert-base-uncased-finetuned-sst-2-english"
+    tokenizerDir := "./distilbert-sst2-ggml"
 	// Execute `python3 tokenize_script.py <tokenizer_directory>`
 	pyCmd := exec.Command("python3", "tokenize_script.py", tokenizerDir)
 	// Pass the input text from the UI to the Python script's standard input
@@ -75,7 +84,7 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Execute the C++ host application as a subprocess
 	hostAppPath := "./ml_host_prod_go"
-        modelPath := "./model/bert.bin"
+    modelPath := "./distilbert-sst2-ggml/model.ggml"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")

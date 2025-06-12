@@ -140,7 +140,8 @@ COPY tokenize_script.py .
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/model/bert.bin ./model/bert.bin
+COPY --from=builder /app/distilbert-sst2-ggml/model.ggml ./model/model.ggml
+COPY --from=builder /app/distilbert-sst2-ggml ./distilbert-sst2-ggml
 
 COPY --from=go-builder /main ./main
 COPY frontend ./frontend
