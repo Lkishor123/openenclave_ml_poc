@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     openssl \
     libssl-dev \
     pkg-config \
-    # We don't need python here as no scripts are run
+    wget
 
 # Install Intel SGX and Open Enclave SDK dependencies
 RUN echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main' | tee /etc/apt/sources.list.d/intel-sgx.list \
