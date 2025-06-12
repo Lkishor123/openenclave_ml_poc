@@ -41,29 +41,29 @@ set(SIGNED_ENCLAVE_FULL_PATH "${ENCLAVE_BUILD_OUTPUT_DIR}/${ENCLAVE_TARGET_NAME}
 
 set(MODEL_PATH_FOR_RUN_TARGET "${CMAKE_BINARY_DIR}/model/bert.bin")
 
-# MODIFIED: Removed the problematic get_target_property calls.
-# The LD_LIBRARY_PATH will now be set using a generator expression inside the custom target.
 message(STATUS "[Host CMake] Model destination path for run target: ${MODEL_PATH_FOR_RUN_TARGET}")
 
-# 2. Updated the 'run' target to work with the new stdin-based host
-# This now pipes a sample input string to the executable for testing.
-# NOTE: The GGML model must be downloaded via scripts/download_deps.sh
-# before attempting to run this target.
+# The paths to the tokenizer script and its data directory, relative to the root of the project.
+set(TOKENIZER_SCRIPT_PATH ${CMAKE_SOURCE_DIR}/tokenize_script.py)
+set(TOKENIZER_DATA_DIR ${CMAKE_SOURCE_DIR}/tokenizer)
+
+# 2. Updated the 'run' target to a two-step process.
 add_custom_target(run
-    # MODIFIED: Use a generator expression to get the library directory at build time.
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:bert>:$<TARGET_FILE_DIR:ggml>" bash -c "if [ ! -f \"${MODEL_PATH_FOR_RUN_TARGET}\" ]; then echo 'Model file missing at ${MODEL_PATH_FOR_RUN_TARGET}. Run scripts/download_deps.sh first.'; exit 1; fi; echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
+    # MODIFIED: The command now pipes the content of 'tokens_ready.txt'
+    # into the host application, which now expects input from stdin.
+    # The user is responsible for creating tokens_ready.txt.
+    COMMAND bash -c "cat tokens_ready.txt | ${CMAKE_COMMAND} -E env 'LD_LIBRARY_PATH=$<TARGET_FILE_DIR:bert>:$<TARGET_FILE_DIR:ggml>' ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
-    COMMENT "Running ML PoC. Host: ./${HOST_APP_NAME}, Model: ${MODEL_PATH_FOR_RUN_TARGET}, Enclave: ${SIGNED_ENCLAVE_FULL_PATH}"
+    COMMENT "Running ML PoC with tokenized input from file. Host: ./${HOST_APP_NAME}"
     VERBATIM
 )
 
 add_custom_target(run_simulate
-    # MODIFIED: Use a generator expression to get the library directory at build time.
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:bert>:$<TARGET_FILE_DIR:ggml>" bash -c "if [ ! -f \"${MODEL_PATH_FOR_RUN_TARGET}\" ]; then echo 'Model file missing at ${MODEL_PATH_FOR_RUN_TARGET}. Run scripts/download_deps.sh first.'; exit 1; fi; echo '3.14,-2.71' | ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
+    COMMAND bash -c "cat tokens_ready.txt | ${CMAKE_COMMAND} -E env 'LD_LIBRARY_PATH=$<TARGET_FILE_DIR:bert>:$<TARGET_FILE_DIR:ggml>' ./${HOST_APP_NAME} ${MODEL_PATH_FOR_RUN_TARGET} ${SIGNED_ENCLAVE_FULL_PATH} --use-stdin --simulate"
     DEPENDS ${HOST_APP_NAME} ${ENCLAVE_TARGET_NAME}_signed
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Execute from build/host/
-    COMMENT "Running ML PoC in SIMULATION mode."
+    COMMENT "Running ML PoC in SIMULATION mode with tokenized input from file."
     VERBATIM
 )
 
