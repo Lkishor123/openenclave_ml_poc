@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     python3 \
+    python3-pip \
     wget \
     openssl \
     libssl-dev \
@@ -57,17 +58,12 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # The sourcing is correctly done in the build step below.
 
 
-# Clone and build GGML
-RUN git clone https://github.com/ggerganov/ggml.git && \
-    cd ggml && \
-    make && \
-    mkdir -p /opt/ggml/lib /opt/ggml/include && \
-    cp libggml.a /opt/ggml/lib/ && \
-    cp -r include/ /opt/ggml/include/
-
 # Copy source code
 COPY . /app
 WORKDIR /app
+
+# Download GGML library and BERT model
+RUN ./scripts/download_assets.sh
 
 # Build the C++ application
 # Note: The WORKDIR is /app, so we cd into build from there.
@@ -144,8 +140,7 @@ COPY tokenize_script.py .
 # Copy built artifacts from previous stages
 COPY --from=builder /app/build/host/ml_host_prod_go ./ml_host_prod_go
 COPY --from=builder /app/build/enclave/enclave_prod.signed.so ./enclave/enclave_prod.signed.so
-COPY --from=builder /app/distilbert-sst2-onnx/model.ggml ./model/model.ggml
-COPY --from=builder /app/distilbert-sst2-onnx ./distilbert-sst2-onnx
+COPY --from=builder /app/model/model.ggml ./model/model.ggml
 
 COPY --from=go-builder /main ./main
 COPY frontend ./frontend
