@@ -7,6 +7,7 @@
 #include <map>
 #include <sstream>
 #include <cstring>
+#include <unistd.h> // MODIFIED: Added for the _exit() call
 
 #include <openenclave/host.h>
 #include <openenclave/bits/result.h>
@@ -195,18 +196,17 @@ int main(int argc, char* argv[]) {
         }
         std::cout << std::endl;
 
-        // MODIFIED: Commented out the termination call that was causing a 'double free' crash.
-        // In a one-shot process, letting the OS reclaim memory is a safe and effective workaround.
-        // terminate_enclave_ml_context(enclave, &ecall_ret_status, enclave_ml_session_handle);
-        host_app_ret_val = 0;
+        // MODIFIED: After successfully printing the output, exit immediately.
+        // This bypasses the crashing libc cleanup routines.
+        _exit(0);
 
     } catch (const std::exception& e) {
         std::cerr << "Host exception: " << e.what() << std::endl;
         host_app_ret_val = 1;
     }
     
-    // MODIFIED: Commented out the final enclave termination as well to prevent any crashes on exit.
-    // if (enclave) oe_terminate_enclave(enclave);
+    // The following lines are now effectively unreachable, but are kept for completeness.
+    if (enclave) oe_terminate_enclave(enclave);
     
     return host_app_ret_val;
 }
