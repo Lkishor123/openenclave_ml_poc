@@ -55,7 +55,7 @@ void oe_log_init_ecall(
     uint32_t log_level);
 
 /**** OCALL prototypes. ****/
-oe_result_t ocall_onnx_load_model(
+oe_result_t ocall_ggml_load_model(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
@@ -63,7 +63,7 @@ oe_result_t ocall_onnx_load_model(
     const unsigned char* model_data,
     size_t model_data_len);
 
-oe_result_t ocall_onnx_run_inference(
+oe_result_t ocall_ggml_run_inference(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
@@ -74,7 +74,7 @@ oe_result_t ocall_onnx_run_inference(
     size_t output_buf_len,
     size_t* actual_output_len);
 
-oe_result_t ocall_onnx_release_session(
+oe_result_t ocall_ggml_release_session(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,

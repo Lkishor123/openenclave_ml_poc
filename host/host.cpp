@@ -56,7 +56,7 @@ std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     return buffer;
 }
 
-oe_result_t ocall_onnx_load_model(
+oe_result_t ocall_ggml_load_model(
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
     uint64_t* host_session_handle_out,
@@ -82,14 +82,14 @@ oe_result_t ocall_onnx_load_model(
         *host_session_handle_out = current_host_handle;
         *host_return_value = OE_OK;
     } catch (const std::exception& e) {
-        std::cerr << "[Host] Exception in ocall_onnx_load_model: " << e.what() << std::endl;
+        std::cerr << "[Host] Exception in ocall_ggml_load_model: " << e.what() << std::endl;
         *host_return_value = OE_FAILURE;
     }
     *ocall_host_ret = OE_OK;
     return OE_OK;
 }
 
-oe_result_t ocall_onnx_run_inference(
+oe_result_t ocall_ggml_run_inference(
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
     uint64_t host_session_handle,
@@ -155,7 +155,7 @@ oe_result_t ocall_onnx_run_inference(
     return OE_OK;
 }
 
-oe_result_t ocall_onnx_release_session(
+oe_result_t ocall_ggml_release_session(
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
     uint64_t host_session_handle) {

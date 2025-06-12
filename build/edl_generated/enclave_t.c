@@ -757,9 +757,9 @@ size_t oe_ecalls_table_size = OE_COUNTOF(oe_ecalls_table);
 /**** Untrusted function IDs. ****/
 enum
 {
-    enclave_fcn_id_ocall_onnx_load_model = 0,
-    enclave_fcn_id_ocall_onnx_run_inference = 1,
-    enclave_fcn_id_ocall_onnx_release_session = 2,
+    enclave_fcn_id_ocall_ggml_load_model = 0,
+    enclave_fcn_id_ocall_ggml_run_inference = 1,
+    enclave_fcn_id_ocall_ggml_release_session = 2,
     enclave_fcn_id_oe_get_supported_attester_format_ids_ocall = 3,
     enclave_fcn_id_oe_get_qetarget_info_ocall = 4,
     enclave_fcn_id_oe_get_quote_ocall = 5,
@@ -781,7 +781,7 @@ enum
 };
 
 /**** OCALL marshalling structs. ****/
-typedef struct _ocall_onnx_load_model_args_t
+typedef struct _ocall_ggml_load_model_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -792,9 +792,9 @@ typedef struct _ocall_onnx_load_model_args_t
     uint64_t* host_session_handle;
     unsigned char* model_data;
     size_t model_data_len;
-} ocall_onnx_load_model_args_t;
+} ocall_ggml_load_model_args_t;
 
-typedef struct _ocall_onnx_run_inference_args_t
+typedef struct _ocall_ggml_run_inference_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -808,9 +808,9 @@ typedef struct _ocall_onnx_run_inference_args_t
     void* output_data;
     size_t output_buf_len;
     size_t* actual_output_len;
-} ocall_onnx_run_inference_args_t;
+} ocall_ggml_run_inference_args_t;
 
-typedef struct _ocall_onnx_release_session_args_t
+typedef struct _ocall_ggml_release_session_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -819,7 +819,7 @@ typedef struct _ocall_onnx_release_session_args_t
     oe_result_t* ocall_host_ret;
     oe_result_t* host_return_value;
     uint64_t host_session_handle;
-} ocall_onnx_release_session_args_t;
+} ocall_ggml_release_session_args_t;
 
 typedef struct _oe_get_supported_attester_format_ids_ocall_args_t
 {
@@ -1083,7 +1083,7 @@ typedef struct _oe_write_ocall_args_t
 
 /**** OCALL function wrappers. ****/
 
-oe_result_t ocall_onnx_load_model(
+oe_result_t ocall_ggml_load_model(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
@@ -1099,7 +1099,7 @@ oe_result_t ocall_onnx_load_model(
         return oe_get_enclave_status();
 
     /* Marshalling struct. */
-    ocall_onnx_load_model_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
+    ocall_ggml_load_model_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
     /* Marshalling buffer and sizes. */
     size_t _input_buffer_size = 0;
     size_t _output_buffer_size = 0;
@@ -1121,12 +1121,12 @@ oe_result_t ocall_onnx_load_model(
     _args.model_data_len = model_data_len;
 
     /* Compute input buffer size. Include in and in-out parameters. */
-    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_onnx_load_model_args_t));
+    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_ggml_load_model_args_t));
     if (model_data)
         OE_ADD_ARG_SIZE(_input_buffer_size, 1, _args.model_data_len);
     
     /* Compute output buffer size. Include out and in-out parameters. */
-    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_onnx_load_model_args_t));
+    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_ggml_load_model_args_t));
     if (ocall_host_ret)
         OE_ADD_ARG_SIZE(_output_buffer_size, 1, sizeof(oe_result_t));
     if (host_return_value)
@@ -1147,7 +1147,7 @@ oe_result_t ocall_onnx_load_model(
     }
     
     /* Serialize buffer inputs (in and in-out parameters). */
-    _pargs_in = (ocall_onnx_load_model_args_t*)_input_buffer;
+    _pargs_in = (ocall_ggml_load_model_args_t*)_input_buffer;
     OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));
     if (model_data)
         OE_WRITE_IN_PARAM_WITH_BARRIER(model_data, 1, _args.model_data_len, unsigned char*);
@@ -1157,7 +1157,7 @@ oe_result_t ocall_onnx_load_model(
 
     /* Call host function. */
     if ((_result = oe_call_host_function(
-             enclave_fcn_id_ocall_onnx_load_model,
+             enclave_fcn_id_ocall_ggml_load_model,
              _input_buffer,
              _input_buffer_size,
              _output_buffer,
@@ -1195,7 +1195,7 @@ oe_result_t ocall_onnx_load_model(
     }
 
     /* Setup output arg struct pointer. */
-    _pargs_out = (ocall_onnx_load_model_args_t*)_output_buffer;
+    _pargs_out = (ocall_ggml_load_model_args_t*)_output_buffer;
     OE_ADD_SIZE(_output_buffer_offset, sizeof(*_pargs_out));
 
     /* Check if the call succeeded. */
@@ -1224,7 +1224,7 @@ done:
     return _result;
 }
 
-oe_result_t ocall_onnx_run_inference(
+oe_result_t ocall_ggml_run_inference(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
@@ -1243,7 +1243,7 @@ oe_result_t ocall_onnx_run_inference(
         return oe_get_enclave_status();
 
     /* Marshalling struct. */
-    ocall_onnx_run_inference_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
+    ocall_ggml_run_inference_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
     /* Marshalling buffer and sizes. */
     size_t _input_buffer_size = 0;
     size_t _output_buffer_size = 0;
@@ -1268,12 +1268,12 @@ oe_result_t ocall_onnx_run_inference(
     _args.actual_output_len = (size_t*)actual_output_len;
 
     /* Compute input buffer size. Include in and in-out parameters. */
-    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_onnx_run_inference_args_t));
+    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_ggml_run_inference_args_t));
     if (input_data)
         OE_ADD_ARG_SIZE(_input_buffer_size, 1, _args.input_len);
     
     /* Compute output buffer size. Include out and in-out parameters. */
-    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_onnx_run_inference_args_t));
+    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_ggml_run_inference_args_t));
     if (ocall_host_ret)
         OE_ADD_ARG_SIZE(_output_buffer_size, 1, sizeof(oe_result_t));
     if (host_return_value)
@@ -1296,7 +1296,7 @@ oe_result_t ocall_onnx_run_inference(
     }
     
     /* Serialize buffer inputs (in and in-out parameters). */
-    _pargs_in = (ocall_onnx_run_inference_args_t*)_input_buffer;
+    _pargs_in = (ocall_ggml_run_inference_args_t*)_input_buffer;
     OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));
     if (input_data)
         OE_WRITE_IN_PARAM_WITH_BARRIER(input_data, 1, _args.input_len, void*);
@@ -1306,7 +1306,7 @@ oe_result_t ocall_onnx_run_inference(
 
     /* Call host function. */
     if ((_result = oe_call_host_function(
-             enclave_fcn_id_ocall_onnx_run_inference,
+             enclave_fcn_id_ocall_ggml_run_inference,
              _input_buffer,
              _input_buffer_size,
              _output_buffer,
@@ -1344,7 +1344,7 @@ oe_result_t ocall_onnx_run_inference(
     }
 
     /* Setup output arg struct pointer. */
-    _pargs_out = (ocall_onnx_run_inference_args_t*)_output_buffer;
+    _pargs_out = (ocall_ggml_run_inference_args_t*)_output_buffer;
     OE_ADD_SIZE(_output_buffer_offset, sizeof(*_pargs_out));
 
     /* Check if the call succeeded. */
@@ -1374,7 +1374,7 @@ done:
     return _result;
 }
 
-oe_result_t ocall_onnx_release_session(
+oe_result_t ocall_ggml_release_session(
     oe_result_t* _retval,
     oe_result_t* ocall_host_ret,
     oe_result_t* host_return_value,
@@ -1388,7 +1388,7 @@ oe_result_t ocall_onnx_release_session(
         return oe_get_enclave_status();
 
     /* Marshalling struct. */
-    ocall_onnx_release_session_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
+    ocall_ggml_release_session_args_t _args, *_pargs_in = NULL, *_pargs_out = NULL;
     /* Marshalling buffer and sizes. */
     size_t _input_buffer_size = 0;
     size_t _output_buffer_size = 0;
@@ -1408,11 +1408,11 @@ oe_result_t ocall_onnx_release_session(
     _args.host_session_handle = host_session_handle;
 
     /* Compute input buffer size. Include in and in-out parameters. */
-    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_onnx_release_session_args_t));
+    OE_ADD_SIZE(_input_buffer_size, sizeof(ocall_ggml_release_session_args_t));
     /* There were no corresponding parameters. */
     
     /* Compute output buffer size. Include out and in-out parameters. */
-    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_onnx_release_session_args_t));
+    OE_ADD_SIZE(_output_buffer_size, sizeof(ocall_ggml_release_session_args_t));
     if (ocall_host_ret)
         OE_ADD_ARG_SIZE(_output_buffer_size, 1, sizeof(oe_result_t));
     if (host_return_value)
@@ -1431,7 +1431,7 @@ oe_result_t ocall_onnx_release_session(
     }
     
     /* Serialize buffer inputs (in and in-out parameters). */
-    _pargs_in = (ocall_onnx_release_session_args_t*)_input_buffer;
+    _pargs_in = (ocall_ggml_release_session_args_t*)_input_buffer;
     OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));
     /* There were no in nor in-out parameters. */
     
@@ -1440,7 +1440,7 @@ oe_result_t ocall_onnx_release_session(
 
     /* Call host function. */
     if ((_result = oe_call_host_function(
-             enclave_fcn_id_ocall_onnx_release_session,
+             enclave_fcn_id_ocall_ggml_release_session,
              _input_buffer,
              _input_buffer_size,
              _output_buffer,
@@ -1478,7 +1478,7 @@ oe_result_t ocall_onnx_release_session(
     }
 
     /* Setup output arg struct pointer. */
-    _pargs_out = (ocall_onnx_release_session_args_t*)_output_buffer;
+    _pargs_out = (ocall_ggml_release_session_args_t*)_output_buffer;
     OE_ADD_SIZE(_output_buffer_offset, sizeof(*_pargs_out));
 
     /* Check if the call succeeded. */

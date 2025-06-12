@@ -1079,9 +1079,9 @@ OE_WEAK_ALIAS(enclave_oe_log_init_ecall, oe_log_init_ecall);
 /**** Untrusted function IDs. ****/
 enum
 {
-    enclave_fcn_id_ocall_onnx_load_model = 0,
-    enclave_fcn_id_ocall_onnx_run_inference = 1,
-    enclave_fcn_id_ocall_onnx_release_session = 2,
+    enclave_fcn_id_ocall_ggml_load_model = 0,
+    enclave_fcn_id_ocall_ggml_run_inference = 1,
+    enclave_fcn_id_ocall_ggml_release_session = 2,
     enclave_fcn_id_oe_get_supported_attester_format_ids_ocall = 3,
     enclave_fcn_id_oe_get_qetarget_info_ocall = 4,
     enclave_fcn_id_oe_get_quote_ocall = 5,
@@ -1103,7 +1103,7 @@ enum
 };
 
 /**** OCALL marshalling structs. ****/
-typedef struct _ocall_onnx_load_model_args_t
+typedef struct _ocall_ggml_load_model_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -1114,9 +1114,9 @@ typedef struct _ocall_onnx_load_model_args_t
     uint64_t* host_session_handle;
     unsigned char* model_data;
     size_t model_data_len;
-} ocall_onnx_load_model_args_t;
+} ocall_ggml_load_model_args_t;
 
-typedef struct _ocall_onnx_run_inference_args_t
+typedef struct _ocall_ggml_run_inference_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -1130,9 +1130,9 @@ typedef struct _ocall_onnx_run_inference_args_t
     void* output_data;
     size_t output_buf_len;
     size_t* actual_output_len;
-} ocall_onnx_run_inference_args_t;
+} ocall_ggml_run_inference_args_t;
 
-typedef struct _ocall_onnx_release_session_args_t
+typedef struct _ocall_ggml_release_session_args_t
 {
     oe_result_t oe_result;
     uint8_t* deepcopy_out_buffer;
@@ -1141,7 +1141,7 @@ typedef struct _ocall_onnx_release_session_args_t
     oe_result_t* ocall_host_ret;
     oe_result_t* host_return_value;
     uint64_t host_session_handle;
-} ocall_onnx_release_session_args_t;
+} ocall_ggml_release_session_args_t;
 
 typedef struct _oe_get_supported_attester_format_ids_ocall_args_t
 {
@@ -1405,7 +1405,7 @@ typedef struct _oe_write_ocall_args_t
 
 /**** OCALL functions. ****/
 
-static void ocall_ocall_onnx_load_model(
+static void ocall_ocall_ggml_load_model(
     uint8_t* input_buffer,
     size_t input_buffer_size,
     uint8_t* output_buffer,
@@ -1416,8 +1416,8 @@ static void ocall_ocall_onnx_load_model(
     OE_UNUSED(input_buffer_size);
 
     /* Prepare parameters. */
-    ocall_onnx_load_model_args_t* _pargs_in = (ocall_onnx_load_model_args_t*)input_buffer;
-    ocall_onnx_load_model_args_t* _pargs_out = (ocall_onnx_load_model_args_t*)output_buffer;
+    ocall_ggml_load_model_args_t* _pargs_in = (ocall_ggml_load_model_args_t*)input_buffer;
+    ocall_ggml_load_model_args_t* _pargs_out = (ocall_ggml_load_model_args_t*)output_buffer;
 
     size_t _input_buffer_offset = 0;
     size_t _output_buffer_offset = 0;
@@ -1447,7 +1447,7 @@ static void ocall_ocall_onnx_load_model(
         OE_SET_OUT_POINTER(host_session_handle, 1, sizeof(uint64_t), uint64_t*);
 
     /* Call user function. */
-    _pargs_out->oe_retval = ocall_onnx_load_model(
+    _pargs_out->oe_retval = ocall_ggml_load_model(
         _pargs_in->ocall_host_ret,
         _pargs_in->host_return_value,
         _pargs_in->host_session_handle,
@@ -1470,7 +1470,7 @@ done:
         _pargs_out->oe_result = _result;
 }
 
-static void ocall_ocall_onnx_run_inference(
+static void ocall_ocall_ggml_run_inference(
     uint8_t* input_buffer,
     size_t input_buffer_size,
     uint8_t* output_buffer,
@@ -1481,8 +1481,8 @@ static void ocall_ocall_onnx_run_inference(
     OE_UNUSED(input_buffer_size);
 
     /* Prepare parameters. */
-    ocall_onnx_run_inference_args_t* _pargs_in = (ocall_onnx_run_inference_args_t*)input_buffer;
-    ocall_onnx_run_inference_args_t* _pargs_out = (ocall_onnx_run_inference_args_t*)output_buffer;
+    ocall_ggml_run_inference_args_t* _pargs_in = (ocall_ggml_run_inference_args_t*)input_buffer;
+    ocall_ggml_run_inference_args_t* _pargs_out = (ocall_ggml_run_inference_args_t*)output_buffer;
 
     size_t _input_buffer_offset = 0;
     size_t _output_buffer_offset = 0;
@@ -1514,7 +1514,7 @@ static void ocall_ocall_onnx_run_inference(
         OE_SET_OUT_POINTER(actual_output_len, 1, sizeof(size_t), size_t*);
 
     /* Call user function. */
-    _pargs_out->oe_retval = ocall_onnx_run_inference(
+    _pargs_out->oe_retval = ocall_ggml_run_inference(
         _pargs_in->ocall_host_ret,
         _pargs_in->host_return_value,
         _pargs_in->host_session_handle,
@@ -1540,7 +1540,7 @@ done:
         _pargs_out->oe_result = _result;
 }
 
-static void ocall_ocall_onnx_release_session(
+static void ocall_ocall_ggml_release_session(
     uint8_t* input_buffer,
     size_t input_buffer_size,
     uint8_t* output_buffer,
@@ -1551,8 +1551,8 @@ static void ocall_ocall_onnx_release_session(
     OE_UNUSED(input_buffer_size);
 
     /* Prepare parameters. */
-    ocall_onnx_release_session_args_t* _pargs_in = (ocall_onnx_release_session_args_t*)input_buffer;
-    ocall_onnx_release_session_args_t* _pargs_out = (ocall_onnx_release_session_args_t*)output_buffer;
+    ocall_ggml_release_session_args_t* _pargs_in = (ocall_ggml_release_session_args_t*)input_buffer;
+    ocall_ggml_release_session_args_t* _pargs_out = (ocall_ggml_release_session_args_t*)output_buffer;
 
     size_t _input_buffer_offset = 0;
     size_t _output_buffer_offset = 0;
@@ -1579,7 +1579,7 @@ static void ocall_ocall_onnx_release_session(
         OE_SET_OUT_POINTER(host_return_value, 1, sizeof(oe_result_t), oe_result_t*);
 
     /* Call user function. */
-    _pargs_out->oe_retval = ocall_onnx_release_session(
+    _pargs_out->oe_retval = ocall_ggml_release_session(
         _pargs_in->ocall_host_ret,
         _pargs_in->host_return_value,
         _pargs_in->host_session_handle);
@@ -2869,9 +2869,9 @@ done:
 /**** OCALL function table. ****/
 
 static oe_ocall_func_t _enclave_ocall_function_table[] = {
-    (oe_ocall_func_t) ocall_ocall_onnx_load_model,
-    (oe_ocall_func_t) ocall_ocall_onnx_run_inference,
-    (oe_ocall_func_t) ocall_ocall_onnx_release_session,
+    (oe_ocall_func_t) ocall_ocall_ggml_load_model,
+    (oe_ocall_func_t) ocall_ocall_ggml_run_inference,
+    (oe_ocall_func_t) ocall_ocall_ggml_release_session,
     (oe_ocall_func_t) ocall_oe_get_supported_attester_format_ids_ocall,
     (oe_ocall_func_t) ocall_oe_get_qetarget_info_ocall,
     (oe_ocall_func_t) ocall_oe_get_quote_ocall,
