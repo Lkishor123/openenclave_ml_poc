@@ -71,8 +71,7 @@ set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(${GGML_SOURCE_DIR} external_ggml_build)
 
-get_target_property(GGML_LIBRARY ggml LOCATION)
-set(GLOBAL_GGML_INCLUDE_DIR ${GGML_SOURCE_DIR}/include CACHE INTERNAL "GGML include directory")
+set(GLOBAL_GGML_LIBRARY ggml CACHE INTERNAL "GGML library target")
 set(GLOBAL_GGML_LIBRARY ${GGML_LIBRARY} CACHE INTERNAL "GGML library path")
 
 # --- Build bert.cpp from external directory ---
@@ -80,6 +79,8 @@ set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
 if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
 endif()
+
+set(BERT_STANDALONE ON CACHE BOOL "" FORCE)
 add_subdirectory(${BERTCPP_SOURCE_DIR} external_bertcpp_build)
 set(GLOBAL_BERTCPP_INCLUDE_DIR ${BERTCPP_SOURCE_DIR} CACHE INTERNAL "bert.cpp include directory")
 
