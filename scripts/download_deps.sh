@@ -15,10 +15,10 @@ echo "Dependencies downloaded to $(pwd)/model and $(pwd)/tokenizer"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EXTERNAL_DIR="${ROOT_DIR}/external"
 GGML_REPO="https://github.com/ggerganov/ggml.git"
-# MODIFIED: Updated ggml commit to a version compatible with the bert.cpp commit.
-GGML_COMMIT="a3c634c436f5631a3d24e548cc6a1202e85e3d7a"
+# MODIFIED: Updated ggml and bert.cpp to the latest compatible commits.
+GGML_COMMIT="c4a2a4c6c21e6f7773534b3e803565ac7c29e46a"
 BERTCPP_REPO="https://github.com/ggerganov/bert.cpp.git"
-BERTCPP_COMMIT="7f084fa6bdab9939b383495666617ceabe1522db"
+BERTCPP_COMMIT="b4330a33a82c8abe6b37e8c37223de84a7d30a6c"
 
 mkdir -p "${EXTERNAL_DIR}"
 
@@ -26,9 +26,11 @@ clone_repo() {
     local repo=$1
     local dest=$2
     local commit=$3
-    if [ ! -d "$dest/.git" ]; then
-        git clone "$repo" "$dest"
+    # Remove the destination directory if it exists to ensure a fresh clone
+    if [ -d "$dest" ]; then
+        rm -rf "$dest"
     fi
+    git clone "$repo" "$dest"
     git -C "$dest" fetch --all
     git -C "$dest" checkout "$commit"
 }
