@@ -28,12 +28,12 @@ static uint64_t g_next_session_handle = 1;
 static std::string g_model_path;
 
 // Helper function to perform inference. This will be called inside the main loop.
-void do_inference(oe_enclave_t* enclave, uint64_t session_handle, const std::string& line) {
+void process_inference(oe_enclave_t* enclave, uint64_t session_handle, const std::string& line) {
     std::vector<int64_t> input_tensor_values;
     std::stringstream ss(line);
     std::string value_str;
     while(std::getline(ss, value_str, ',')) {
-        // MODIFIED: Added a check to ensure the token string is not empty before parsing.
+        // FIXED: Added a check to ensure the token string is not empty before parsing.
         // This prevents the 'stoll' exception with malformed input.
         if (!value_str.empty()) {
             input_tensor_values.push_back(std::stoll(value_str));
@@ -216,7 +216,10 @@ int main(int argc, char* argv[]) {
         // Continuously read lines from stdin, process them, and write results to stdout.
         std::string line;
         while (std::getline(std::cin, line)) {
-            do_inference(enclave, enclave_ml_session_handle, line);
+            if (line.empty()) {
+                continue;
+            }
+            process_inference(enclave, enclave_ml_session_handle, line);
         }
 
     } catch (const std::exception& e) {
