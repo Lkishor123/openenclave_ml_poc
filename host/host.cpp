@@ -211,8 +211,19 @@ int main(int argc, char* argv[]) {
         std::cerr << "Host exception: " << e.what() << std::endl;
         host_app_ret_val = 1;
     }
-    
-    // The following lines are now effectively unreachable but are kept for completeness.
+
+    // Tear down the enclave ML context if it was initialized.
+    if (enclave_ml_session_handle != 0) {
+        oe_result_t ecall_ret_status = OE_FAILURE;
+        oe_result_t result = terminate_enclave_ml_context(
+            enclave, &ecall_ret_status, enclave_ml_session_handle);
+        if (result != OE_OK || ecall_ret_status != OE_OK) {
+            std::cerr << "[Host] terminate_enclave_ml_context failed with "
+                      << oe_result_str(result != OE_OK ? result : ecall_ret_status)
+                      << std::endl;
+        }
+    }
+
     if (enclave) oe_terminate_enclave(enclave);
     
     return host_app_ret_val;
