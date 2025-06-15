@@ -67,12 +67,33 @@ func startWorker() error {
         if err != nil {
                 return err
         }
-        stdoutPipe, err := workerCmd.StdoutPipe()
-        if err != nil {
-                return err
-        }
-        workerStdout = bufio.NewReader(stdoutPipe)
-        return workerCmd.Start()
+       stdoutPipe, err := workerCmd.StdoutPipe()
+       if err != nil {
+               return err
+       }
+       stderrPipe, err := workerCmd.StderrPipe()
+       if err != nil {
+               return err
+       }
+       workerStdout = bufio.NewReader(stdoutPipe)
+       if err := workerCmd.Start(); err != nil {
+               return err
+       }
+
+       go func() {
+               scanner := bufio.NewScanner(stderrPipe)
+               for scanner.Scan() {
+                       log.Printf("[worker stderr] %s", scanner.Text())
+               }
+       }()
+
+       go func() {
+               if err := workerCmd.Wait(); err != nil {
+                       log.Printf("worker exited: %v", err)
+               }
+       }()
+
+       return nil
 }
 
 // runInference sends a token string to the persistent worker and reads one line of output.
