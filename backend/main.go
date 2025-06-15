@@ -137,7 +137,17 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Tokenization failed", http.StatusInternalServerError)
 		return
 	}
-	tokenString := strings.TrimSpace(string(pyOutput))
+	// Split output by newline and take the last non-empty line.
+	lines := strings.Split(string(pyOutput), "\n")
+	tokenString := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			tokenString = line
+			break
+		}
+	}
+	tokenString = strings.TrimSpace(tokenString)
 
         // --- 2. Inference via C++ Worker ---
         resultString, err := runInference(tokenString)
