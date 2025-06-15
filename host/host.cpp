@@ -26,6 +26,8 @@
 static std::map<uint64_t, bert_ctx*> g_sessions;
 static uint64_t g_next_session_handle = 1;
 static std::string g_model_path;
+// Set when the model is loaded to size output tensors appropriately
+static int g_embedding_dim = 0;
 
 std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     if (!std::filesystem::exists(filepath)) {
@@ -62,6 +64,8 @@ oe_result_t ocall_ggml_load_model(
     if (!ctx)
         return OE_OK;
 
+    // Capture the embedding dimension from this model
+    g_embedding_dim = bert_n_embd(ctx);
     bert_allocate_buffers(ctx, bert_n_max_tokens(ctx), 1);
     uint64_t handle = g_next_session_handle++;
     g_sessions[handle] = ctx;
@@ -188,7 +192,8 @@ int main(int argc, char* argv[]) {
                 }
 
                 size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
-                std::vector<float> output_tensor_values(768); // typical embedding size
+                // Allocate buffer based on the model's embedding dimension
+                std::vector<float> output_tensor_values(g_embedding_dim);
                 size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
                 size_t actual_output_byte_size = 0;
                 OE_HOST_CHECK(enclave_infer(
