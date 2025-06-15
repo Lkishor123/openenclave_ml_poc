@@ -170,37 +170,42 @@ int main(int argc, char* argv[]) {
             model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context");
         OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave)");
 
-        std::vector<int64_t> input_tensor_values;
         if (use_stdin) {
             std::string line;
-            std::getline(std::cin, line);
-            std::stringstream ss(line);
-            std::string value_str;
-            while(std::getline(ss, value_str, ',')) {
-                if (!value_str.empty()){
-                    input_tensor_values.push_back(std::stoll(value_str));
+            while (std::getline(std::cin, line)) {
+                if (line == "quit" || line == "exit")
+                    break;
+                if (line.empty())
+                    continue;
+
+                std::vector<int64_t> input_tensor_values;
+                std::stringstream ss(line);
+                std::string value_str;
+                while (std::getline(ss, value_str, ',')) {
+                    if (!value_str.empty()) {
+                        input_tensor_values.push_back(std::stoll(value_str));
+                    }
                 }
+
+                size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
+                std::vector<float> output_tensor_values(768); // typical embedding size
+                size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
+                size_t actual_output_byte_size = 0;
+                OE_HOST_CHECK(enclave_infer(
+                    enclave, &ecall_ret_status, enclave_ml_session_handle,
+                    input_tensor_values.data(), input_data_byte_size,
+                    output_tensor_values.data(), output_buffer_byte_size,
+                    &actual_output_byte_size), "enclave_infer");
+                OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
+                size_t output_elements = actual_output_byte_size / sizeof(float);
+                for (size_t i = 0; i < output_elements; ++i) {
+                    std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
+                }
+                std::cout << std::endl;
             }
         }
 
-        size_t input_data_byte_size = input_tensor_values.size() * sizeof(int64_t);
-        std::vector<float> output_tensor_values(768); // typical embedding size
-        size_t output_buffer_byte_size = output_tensor_values.size() * sizeof(float);
-        size_t actual_output_byte_size = 0;
-        OE_HOST_CHECK(enclave_infer(
-            enclave, &ecall_ret_status, enclave_ml_session_handle,
-            input_tensor_values.data(), input_data_byte_size,
-            output_tensor_values.data(), output_buffer_byte_size, &actual_output_byte_size), "enclave_infer");
-        OE_HOST_CHECK(ecall_ret_status, "enclave_infer (enclave)");
-        size_t output_elements = actual_output_byte_size / sizeof(float);
-        for (size_t i = 0; i < output_elements; ++i) {
-            std::cout << output_tensor_values[i] << (i == output_elements - 1 ? "" : ", ");
-        }
-        std::cout << std::endl;
-
-        // Exit immediately and successfully after printing the output.
-        // This bypasses the crashing libc cleanup routines.
-        _exit(0);
+        host_app_ret_val = 0;
 
     } catch (const std::exception& e) {
         std::cerr << "Host exception: " << e.what() << std::endl;

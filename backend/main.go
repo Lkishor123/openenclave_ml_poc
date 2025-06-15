@@ -1,16 +1,16 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
-	"fmt"
-	"log"
-	"math"
-	"net/http"
-	"os/exec"
-	"strconv"
-	"strings"
-	"sync"
+        "bufio"
+        "encoding/json"
+        "io"
+        "log"
+        "math"
+        "net/http"
+        "os/exec"
+        "strconv"
+        "strings"
+        "sync"
 )
 
 // Structs for UI communication.
@@ -49,36 +49,61 @@ func cosineSimilarity(a, b []float32) float64 {
 // Global Mutex to ensure the C++ process is only called once at a time.
 var inferenceMutex sync.Mutex
 
-// Starts a new C++ process for a single inference request.
-func runInferenceOnce(tokenString string) (string, error) {
-	hostAppPath := "./ml_host_prod_go"
-	modelPath := "./model/bert.bin"
-	enclavePath := "./enclave/enclave_prod.signed.so"
+var (
+        workerCmd   *exec.Cmd
+        workerStdin io.WriteCloser
+        workerStdout *bufio.Reader
+)
 
-	cppCmd := exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
-	cppCmd.Stdin = strings.NewReader(tokenString)
+// startWorker launches the C++ inference process once and keeps stdin/stdout pipes open.
+func startWorker() error {
+        hostAppPath := "./ml_host_prod_go"
+        modelPath := "./model/bert.bin"
+        enclavePath := "./enclave/enclave_prod.signed.so"
 
-	// Use CombinedOutput to capture both stdout and stderr. This is simpler
-	// for a one-shot process.
-	output, err := cppCmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("C++ process failed: %s", string(output))
-	}
+        workerCmd = exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
+        var err error
+        workerStdin, err = workerCmd.StdinPipe()
+        if err != nil {
+                return err
+        }
+        stdoutPipe, err := workerCmd.StdoutPipe()
+        if err != nil {
+                return err
+        }
+        workerStdout = bufio.NewReader(stdoutPipe)
+        return workerCmd.Start()
+}
 
-	return string(output), nil
+// runInference sends a token string to the persistent worker and reads one line of output.
+func runInference(tokenString string) (string, error) {
+        inferenceMutex.Lock()
+        defer inferenceMutex.Unlock()
+
+        if workerCmd == nil {
+                if err := startWorker(); err != nil {
+                        return "", err
+                }
+        }
+
+        if _, err := io.WriteString(workerStdin, tokenString+"\n"); err != nil {
+                return "", err
+        }
+        line, err := workerStdout.ReadString('\n')
+        if err != nil {
+                return "", err
+        }
+        return line, nil
 }
 
 
 // The main inference handler.
 func handleInference(w http.ResponseWriter, r *http.Request) {
-	var payload RequestPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	inferenceMutex.Lock()
-	defer inferenceMutex.Unlock()
+        var payload RequestPayload
+        if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }
 
 	// --- 1. Tokenization ---
 	tokenizerDir := "./tokenizer"
@@ -93,8 +118,8 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 	}
 	tokenString := strings.TrimSpace(string(pyOutput))
 
-	// --- 2. Inference via C++ Worker ---
-	resultString, err := runInferenceOnce(tokenString)
+        // --- 2. Inference via C++ Worker ---
+        resultString, err := runInference(tokenString)
 	if err != nil {
 		log.Printf("Inference process failed: %v", err)
 		http.Error(w, "Failed to run inference", http.StatusInternalServerError)
@@ -150,9 +175,13 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	fs := http.FileServer(http.Dir("./frontend"))
-	http.Handle("/", fs)
-	http.HandleFunc("/infer", handleInference)
+        if err := startWorker(); err != nil {
+                log.Fatalf("failed to start worker: %v", err)
+        }
+
+        fs := http.FileServer(http.Dir("./frontend"))
+        http.Handle("/", fs)
+        http.HandleFunc("/infer", handleInference)
 
 	log.Println("Starting server on :8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
