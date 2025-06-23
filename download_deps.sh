@@ -15,7 +15,7 @@ mkdir -p model tokenizer
 curl -L https://github.com/Lkishor123/openenclave_ml_poc/releases/download/untagged-7ec4b9a98d1a90bf5157/bge-base-en-v1.5.tgz -o model/bge-base-en-v1.5.tgz
 echo "Extracting bge-base-en-v1.5 model..."
 tar -xzf model/bge-base-en-v1.5.tgz -C model
-cp model/ggml-model-f16.gguf model/bert.bin
+cp model/bge-base-en-v1.5/ggml-model-f16.gguf model/bert.bin
 
 # --- Tokenizer Download ---
 echo "tokenizer for bge-base-en-v1.5..."
