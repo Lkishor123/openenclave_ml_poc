@@ -1,0 +1,30 @@
+# .github/workflows/main.yml
+
+name: CI/CD Pipeline for confidential-ml-app
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v3
+
+    - name: Give execute permissions to download_deps.sh
+      run: chmod +x download_deps.sh
+
+    - name: Run download_deps.sh
+      run: ./download_deps.sh
+      shell: bash
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build Docker image
+      run: docker build -t confidential-ml-app .
