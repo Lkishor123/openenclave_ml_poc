@@ -24,6 +24,8 @@ tokenized input to the enclave, and prints the resulting logits.
 The script also clones the required GGML and bert.cpp repositories used during
 the build.
 
+![openenvlave](https://github.com/user-attachments/assets/d136d379-376f-40ec-86d6-30c421394d34)
+
 ## Build
 
 Generate the enclave keys and edge routines:
