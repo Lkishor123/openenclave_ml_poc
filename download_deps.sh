@@ -19,16 +19,16 @@ cp model/bge-base-en-v1.5/ggml-model-f16.gguf model/bert.bin
 
 # --- Tokenizer Download ---
 echo "tokenizer for bge-base-en-v1.5..."
-cp model/bge-base-en-v1.5/tokenizer.json -o tokenizer/tokenizer.json
-cp model/bge-base-en-v1.5/config.json -o tokenizer/config.json
-cp model/bge-base-en-v1.5/vocab.txt -o tokenizer/vocab.txt
-cp model/bge-base-en-v1.5/tokenizer_config.json -o tokenizer/tokenizer_config.json
+cp model/bge-base-en-v1.5/tokenizer.json tokenizer/tokenizer.json
+cp model/bge-base-en-v1.5/config.json tokenizer/config.json
+cp model/bge-base-en-v1.5/vocab.txt tokenizer/vocab.txt
+cp model/bge-base-en-v1.5/tokenizer_config.json tokenizer/tokenizer_config.json
 
 
 echo "Dependencies downloaded to $(pwd)/model and $(pwd)/tokenizer"
 
 # --- External Library Download ---
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXTERNAL_DIR="${ROOT_DIR}/external"
 BERTCPP_REPO="https://github.com/Lkishor123/bert.cpp.git"
 
