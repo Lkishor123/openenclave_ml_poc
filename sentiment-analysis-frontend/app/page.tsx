@@ -52,7 +52,7 @@ export default function Home() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`, // Send the JWT
         },
-        body: JSON.stringify({ input: inputValue }),
+        body: JSON.stringify({ "input": inputValue }),
       });
 
       if (!response.ok) {
