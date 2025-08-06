@@ -58,7 +58,7 @@ RUN rm -rf build && mkdir build && \
     make
 
 # Stage 2: Build the Go Backend
-FROM golang:1.18-alpine AS go-builder
+FROM golang:1.21-alpine AS go-builder
 
 WORKDIR /app
 # Copy only the necessary files for the Go build
