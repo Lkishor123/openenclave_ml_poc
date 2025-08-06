@@ -292,7 +292,8 @@ func main() {
 
 	// Configure CORS
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"}, // Allow your Next.js dev server
+		// Add the public IP of the frontend here
+		AllowedOrigins:   []string{"http://localhost:3000", "http://40.71.80.56:3000"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
