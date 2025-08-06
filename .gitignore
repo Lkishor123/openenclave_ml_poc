@@ -3,3 +3,4 @@ external/
 model/
 onnx_env
 sentiment-analysis-frontend/node_modules
+.env.backend

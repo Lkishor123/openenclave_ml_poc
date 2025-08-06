@@ -1,0 +1,39 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Frontend Service (Next.js)
+  frontend:
+    build:
+      # Path to the frontend project directory
+      context: ./sentiment-analysis-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./sentiment-analysis-frontend/.env.local
+    networks:
+      - sentiment-net
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Backend Service (Go + SGX)
+  backend:
+    build:
+      # The build context is the current directory, where the backend's Dockerfile is located.
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    # The .env file for the backend should be placed in this same root directory.
+    env_file:
+      - ./.env.backend
+    networks:
+      - sentiment-net
+    restart: unless-stopped
+
+# Defines the network that allows services to communicate
+networks:
+  sentiment-net:
+    driver: bridge
