@@ -17,16 +17,17 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy the rest of the application code
 COPY . .
 
-# Set build-time environment variables
-# Note: These NEXT_PUBLIC_ variables are needed during the build process
-# You can pass them as build arguments in your CI/CD pipeline if they are not in .env.local
+# --- FIX STARTS HERE ---
+# Declare build-time arguments
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_API_URL
 
+# Set environment variables for the build process
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# --- FIX ENDS HERE ---
 
 # Build the Next.js application
 RUN npm run build

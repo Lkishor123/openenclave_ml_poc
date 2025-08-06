@@ -5,13 +5,17 @@ services:
   # Frontend Service (Next.js)
   frontend:
     build:
-      # Path to the frontend project directory
       context: ./sentiment-analysis-frontend
       dockerfile: Dockerfile
+      # This 'args' block now reads variables from the root .env file
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     ports:
       - "3000:3000"
-    env_file:
-      - ./sentiment-analysis-frontend/.env.local
+    # The root .env file is automatically used for the runtime environment,
+    # so the env_file directive is no longer needed here.
     networks:
       - sentiment-net
     depends_on:
@@ -21,12 +25,10 @@ services:
   # Backend Service (Go + SGX)
   backend:
     build:
-      # The build context is the current directory, where the backend's Dockerfile is located.
       context: .
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-    # The .env file for the backend should be placed in this same root directory.
     env_file:
       - ./.env.backend
     networks:
