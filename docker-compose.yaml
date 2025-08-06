@@ -7,15 +7,12 @@ services:
     build:
       context: ./sentiment-analysis-frontend
       dockerfile: Dockerfile
-      # This 'args' block now reads variables from the root .env file
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     ports:
       - "3000:3000"
-    # The root .env file is automatically used for the runtime environment,
-    # so the env_file directive is no longer needed here.
     networks:
       - sentiment-net
     depends_on:
@@ -31,6 +28,9 @@ services:
       - "8080:8080"
     env_file:
       - ./.env.backend
+    devices:
+      - "/dev/sgx_enclave:/dev/sgx_enclave"
+      - "/dev/sgx_provision:/dev/sgx_provision"
     networks:
       - sentiment-net
     restart: unless-stopped
@@ -39,3 +39,4 @@ services:
 networks:
   sentiment-net:
     driver: bridge
+
