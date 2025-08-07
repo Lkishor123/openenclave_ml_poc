@@ -14,6 +14,8 @@
 #include "bert.h"
 #include "enclave_u.h"
 
+#include <openenclave/attestation/attester.h>   // <-- declares oe_free_evidence
+
 // --- NEW INCLUDES for Attestation ---
 #include <iomanip> // For std::hex
 
