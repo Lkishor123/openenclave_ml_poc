@@ -13,7 +13,7 @@
 #include <openenclave/bits/result.h>
 #include "bert.h"
 #include "enclave_u.h"
-#include <openenclave/host_verify.h>          // declares oe_free_evidence()
+#include <cstdlib> // for free()
 
 // --- NEW INCLUDES for Attestation ---
 #include <iomanip> // For std::hex
@@ -204,7 +204,7 @@ int main(int argc, char* argv[]) {
 
             // Print hex string to stdout for the Go app to capture
             std::cout << to_hex_string(evidence_buffer, evidence_size) << std::endl;
-            oe_free_evidence(evidence_buffer);
+            free(evidence_buffer);
             host_app_ret_val = 0; // Success
 
         // --- INFERENCE LOGIC (Unchanged) ---
