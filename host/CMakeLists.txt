@@ -17,7 +17,8 @@ target_sources(${HOST_APP_NAME} PRIVATE
 # has access to both libraries and, crucially, their include paths.
 target_link_libraries(${HOST_APP_NAME} PRIVATE
     openenclave::oehost
-    bert
+    openenclave::oeverifier            # generic dispatch layer
+    openenclave::oeverifiersgx         # SGX‑ECDSA plug‑in    bert
     ggml
     stdc++fs
 )

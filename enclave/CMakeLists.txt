@@ -10,8 +10,8 @@ add_executable(${ENCLAVE_NAME} "")
 # Use CMAKE_CURRENT_SOURCE_DIR to be explicit about the path for enclave.cpp
 # EDL_TRUSTED_C_PATH is set in the root CMakeLists.txt
 target_sources(${ENCLAVE_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/enclave.cpp 
-    ${EDL_TRUSTED_C_PATH}                
+    ${CMAKE_CURRENT_SOURCE_DIR}/enclave.cpp
+    ${EDL_TRUSTED_C_PATH}
 )
 
 # Link the enclave executable against the required Open Enclave libraries.
@@ -23,8 +23,12 @@ target_include_directories(${ENCLAVE_NAME} PRIVATE
     ${OpenEnclave_INCLUDE_DIRS}
 )
 
+
+# Link the enclave executable against the required Open Enclave libraries.
 target_link_libraries(${ENCLAVE_NAME} PRIVATE
     openenclave::oeenclave
+    openenclave::oeattester            # generic dispatch layer
+    openenclave::oeattestersgx         # SGX‑ECDSA plug‑in
     openenclave::oelibcxx
     openenclave::oecryptombedtls
     ${GLOBAL_GGML_LIBRARY}
@@ -47,8 +51,8 @@ message(STATUS "Configuring Enclave (using OCALL strategy): ${ENCLAVE_NAME}")
 message(STATUS "  Enclave sources added: ${CMAKE_CURRENT_SOURCE_DIR}/enclave.cpp, ${EDL_TRUSTED_C_PATH}")
 
 # --- Enclave Signing ---
-set(ENCLAVE_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave.conf) 
-set(ENCLAVE_PRIVATE_KEY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave_private.pem) 
+set(ENCLAVE_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave.conf)
+set(ENCLAVE_PRIVATE_KEY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/enclave_private.pem)
 
 find_package(OpenSSL)
 if(OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
@@ -58,7 +62,7 @@ if(OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
         COMMENT "Generating self-signed key pair (enclave_private.pem) (DEMO ONLY)"
         VERBATIM)
     message(STATUS "Attempting to generate demo key: ${ENCLAVE_PRIVATE_KEY_FILE}")
-else() 
+else()
     if(NOT OpenSSL_FOUND AND NOT EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
         message(WARNING "OpenSSL not found AND private key missing. Cannot generate demo key.")
     elseif(EXISTS ${ENCLAVE_PRIVATE_KEY_FILE})
@@ -69,10 +73,10 @@ endif()
 set(SIGNED_ENCLAVE_FILE ${CMAKE_CURRENT_BINARY_DIR}/${ENCLAVE_NAME}.signed.so)
 
 add_custom_command(OUTPUT ${SIGNED_ENCLAVE_FILE}
-    DEPENDS ${ENCLAVE_NAME} ${ENCLAVE_CONF_FILE} ${ENCLAVE_PRIVATE_KEY_FILE}     
-    COMMAND openenclave::oesign sign    
+    DEPENDS ${ENCLAVE_NAME} ${ENCLAVE_CONF_FILE} ${ENCLAVE_PRIVATE_KEY_FILE}
+    COMMAND openenclave::oesign sign
             -e $<TARGET_FILE:${ENCLAVE_NAME}> -c ${ENCLAVE_CONF_FILE}
-            -k ${ENCLAVE_PRIVATE_KEY_FILE} -o ${SIGNED_ENCLAVE_FILE}   
+            -k ${ENCLAVE_PRIVATE_KEY_FILE} -o ${SIGNED_ENCLAVE_FILE}
     COMMENT "Signing enclave ${ENCLAVE_NAME} -> ${SIGNED_ENCLAVE_FILE}"
     VERBATIM)
 

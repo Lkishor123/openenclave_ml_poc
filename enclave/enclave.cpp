@@ -9,8 +9,9 @@
 #include "enclave_t.h"
 
 // --- NEW INCLUDES for Attestation ---
-#include "openenclave/edl/sgx/attestation.h"
-
+#include <openenclave/attestation/attester.h>      // oe_get_evidence / oe_attester_initialize
+#include <openenclave/attestation/sgx/evidence.h>  // SGX‑specific UUIDs & claims
+#include <openenclave/attestation/endorsements.h>  // optional, if you export endorsements
 
 #define ENCLAVE_LOG(level, fmt, ...) printf("[" level "] [Enclave] " fmt "\n", ##__VA_ARGS__)
 
@@ -130,31 +131,48 @@ oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle) {
 }
 
 // --- NEW ATTESTATION FUNCTION ---
-bool get_attestation_evidence(unsigned char** evidence_buffer, size_t* evidence_size) {
-    oe_result_t result = OE_OK;
-    unsigned char* buffer = NULL;
-    size_t buffer_size = 0;
-
-    const oe_uuid_t format_id = {OE_FORMAT_UUID_SGX_ECDSA};
-
-    result = oe_get_evidence(
-        &format_id,
-        0,
-        NULL,
-        0,
-        NULL,
-        0,
-        &buffer,
-        &buffer_size,
-        NULL,
-        0);
-
-    if (result != OE_OK) {
+bool get_attestation_evidence(unsigned char** evidence_buffer,
+                              size_t* evidence_size)
+{
+    if (!evidence_buffer || !evidence_size)
         return false;
-    }
 
-    *evidence_buffer = buffer;
-    *evidence_size = buffer_size;
+    *evidence_buffer = nullptr;
+    *evidence_size   = 0;
 
+    /* No custom claims and no endorsements in this simple flow. */
+    const void*  custom_claims_buffer        = nullptr;
+    size_t       custom_claims_buffer_size   = 0;
+    const void*  endorsements_buffer_in      = nullptr;
+    size_t       endorsements_buffer_in_size = 0;
+
+    /* Output pointers.  Endorsements are optional—pass NULL if you don’t need
+       them on the host side. */
+    unsigned char* endorsements_buffer_out   = nullptr;
+    size_t         endorsements_size_out     = 0;
+
+    const oe_uuid_t format_id = OE_FORMAT_UUID_SGX_ECDSA;
+
+    oe_result_t r = oe_get_evidence(
+        &format_id,                     /* SGX-ECDSA quote */
+        0,                              /* flags */
+        custom_claims_buffer,
+        custom_claims_buffer_size,
+        endorsements_buffer_in,
+        endorsements_buffer_in_size,
+        evidence_buffer,                /* <-- out */
+        evidence_size,                  /* <-- out */
+        &endorsements_buffer_out,       /* <-- out (optional) */
+        &endorsements_size_out);        /* <-- out (optional) */
+
+    if (r != OE_OK)
+        return false;
+
+    /* If you don’t need endorsements on the host, free them here. */
+    if (endorsements_buffer_out)
+        oe_free_endorsements(endorsements_buffer_out);
+
+    /* The *evidence_buffer* is returned to the host; host must call
+       oe_free_evidence() when done. */
     return true;
 }
