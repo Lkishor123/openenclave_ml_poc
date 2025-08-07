@@ -47,6 +47,8 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 COPY . /app
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y open-enclave-hostverify
+
 # Build the C++ application using the root CMakeLists.txt
 # This now mirrors the successful local build process.
 RUN rm -rf build && mkdir build && \
