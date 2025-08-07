@@ -15,6 +15,14 @@ target_sources(${ENCLAVE_NAME} PRIVATE
 )
 
 # Link the enclave executable against the required Open Enclave libraries.
+
+# Ensure that the Open Enclave include directories are added to this target.
+# Explicitly add the Open Enclave include directories to this target.
+# This ensures the compiler can find "openenclave/edl/sgx/attestation.h" and other headers.
+target_include_directories(${ENCLAVE_NAME} PRIVATE
+    ${OpenEnclave_INCLUDE_DIRS}
+)
+
 target_link_libraries(${ENCLAVE_NAME} PRIVATE
     openenclave::oeenclave
     openenclave::oelibcxx
