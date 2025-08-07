@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get install -y az-dcap-client \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get install -y open-enclave-hostverify
 # Install Open Enclave SDK from .deb package
 RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ubuntu_2004_open-enclave_0.19.0_amd64.deb && \
     apt-get update && \
@@ -46,9 +47,6 @@ RUN wget https://github.com/openenclave/openenclave/releases/download/v0.19.0/Ub
 # This includes the pre-downloaded external/bert.cpp and model/bert.bin
 COPY . /app
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y open-enclave-hostverify
-
 # Build the C++ application using the root CMakeLists.txt
 # This now mirrors the successful local build process.
 RUN rm -rf build && mkdir build && \

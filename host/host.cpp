@@ -13,8 +13,8 @@
 #include <openenclave/bits/result.h>
 #include "bert.h"
 #include "enclave_u.h"
+#include <openenclave/host_verify.h>          // declares oe_free_evidence()
 
-#include <openenclave/attestation/verifier.h>
 // --- NEW INCLUDES for Attestation ---
 #include <iomanip> // For std::hex
 
