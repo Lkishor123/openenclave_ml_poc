@@ -27,8 +27,6 @@ target_include_directories(${ENCLAVE_NAME} PRIVATE
 # Link the enclave executable against the required Open Enclave libraries.
 target_link_libraries(${ENCLAVE_NAME} PRIVATE
     openenclave::oeenclave
-    openenclave::oeattester            # generic dispatch layer
-    openenclave::oeattestersgx         # SGX‑ECDSA plug‑in
     openenclave::oelibcxx
     openenclave::oecryptombedtls
     ${GLOBAL_GGML_LIBRARY}
