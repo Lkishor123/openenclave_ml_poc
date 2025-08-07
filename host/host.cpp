@@ -7,12 +7,16 @@
 #include <map>
 #include <sstream>
 #include <cstring>
-#include <unistd.h> // Required for the _exit() call
+#include <unistd.h>
 
 #include <openenclave/host.h>
 #include <openenclave/bits/result.h>
 #include "bert.h"
 #include "enclave_u.h"
+
+// --- NEW INCLUDES for Attestation ---
+#include <iomanip> // For std::hex
+
 
 #define OE_HOST_CHECK(oe_result, fn) \
     do { \
@@ -28,6 +32,17 @@ static uint64_t g_next_session_handle = 1;
 static std::string g_model_path;
 // Set when the model is loaded to size output tensors appropriately
 static int g_embedding_dim = 0;
+
+
+// Helper function to convert a byte buffer to a hex string for printing
+std::string to_hex_string(const unsigned char* buffer, size_t size) {
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (size_t i = 0; i < size; ++i) {
+        ss << std::setw(2) << static_cast<unsigned>(buffer[i]);
+    }
+    return ss.str();
+}
 
 std::vector<unsigned char> load_file_to_buffer(const std::string& filepath) {
     if (!std::filesystem::exists(filepath)) {
@@ -150,15 +165,19 @@ int main(int argc, char* argv[]) {
     uint64_t enclave_ml_session_handle = 0;
 
     if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <model_path> <enclave_path> [--use-stdin | --attest | --simulate]" << std::endl;
         return 1;
     }
     g_model_path = argv[1];
     const std::string enclave_filepath = argv[2];
     bool use_stdin = false;
     bool simulate = false;
+    bool do_attest = false; // New flag for attestation
+
     for (int i = 3; i < argc; ++i) {
         if (std::string(argv[i]) == "--use-stdin") use_stdin = true;
         else if (std::string(argv[i]) == "--simulate") simulate = true;
+        else if (std::string(argv[i]) == "--attest") do_attest = true;
     }
 
     try {
@@ -167,14 +186,35 @@ int main(int argc, char* argv[]) {
         OE_HOST_CHECK(oe_create_enclave_enclave(
             enclave_filepath.c_str(), OE_ENCLAVE_TYPE_AUTO,
             enclave_flags, nullptr, 0, &enclave), "oe_create_enclave_enclave");
-        std::vector<unsigned char> model_buffer = load_file_to_buffer(g_model_path);
-        oe_result_t ecall_ret_status;
-        OE_HOST_CHECK(initialize_enclave_ml_context(
-            enclave, &ecall_ret_status, model_buffer.data(),
-            model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context");
-        OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave)");
 
-        if (use_stdin) {
+        // --- ATTESTATION LOGIC ---
+        if (do_attest) {
+            unsigned char* evidence_buffer = NULL;
+            size_t evidence_size = 0;
+            bool success = false;
+            oe_result_t ecall_result;
+
+            ecall_result = get_attestation_evidence(enclave, &success, &evidence_buffer, &evidence_size);
+            OE_HOST_CHECK(ecall_result, "get_attestation_evidence");
+
+            if (!success) {
+                 throw std::runtime_error("ECALL to get_attestation_evidence failed.");
+            }
+
+            // Print hex string to stdout for the Go app to capture
+            std::cout << to_hex_string(evidence_buffer, evidence_size) << std::endl;
+            oe_free_evidence(evidence_buffer);
+            host_app_ret_val = 0; // Success
+
+        // --- INFERENCE LOGIC (Unchanged) ---
+        } else if (use_stdin) {
+            std::vector<unsigned char> model_buffer = load_file_to_buffer(g_model_path);
+            oe_result_t ecall_ret_status;
+            OE_HOST_CHECK(initialize_enclave_ml_context(
+                enclave, &ecall_ret_status, model_buffer.data(),
+                model_buffer.size(), &enclave_ml_session_handle), "initialize_enclave_ml_context");
+            OE_HOST_CHECK(ecall_ret_status, "initialize_enclave_ml_context (enclave)");
+
             std::string line;
             while (std::getline(std::cin, line)) {
                 if (line == "quit" || line == "exit")
@@ -208,16 +248,16 @@ int main(int argc, char* argv[]) {
                 }
                 std::cout << std::endl;
             }
+            host_app_ret_val = 0;
         }
 
-        host_app_ret_val = 0;
 
     } catch (const std::exception& e) {
         std::cerr << "Host exception: " << e.what() << std::endl;
         host_app_ret_val = 1;
     }
 
-    // Tear down the enclave ML context if it was initialized.
+        // Tear down the enclave ML context if it was initialized.
     if (enclave_ml_session_handle != 0) {
         oe_result_t ecall_ret_status = OE_FAILURE;
         oe_result_t result = terminate_enclave_ml_context(
@@ -230,6 +270,6 @@ int main(int argc, char* argv[]) {
     }
 
     if (enclave) oe_terminate_enclave(enclave);
-    
+
     return host_app_ret_val;
 }

@@ -30,6 +30,12 @@ type ResponsePayload struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// --- NEW STRUCT for Attestation Response ---
+type AttestationResponse struct {
+	EvidenceHex string `json:"evidence_hex,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
 // --- Sentiment Analysis Logic (Unchanged) ---
 
 // Pre-computed embeddings for reference sentences.
@@ -138,6 +144,13 @@ func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(ResponsePayload{Error: message})
 }
 
+// --- NEW Utility for Attestation Errors ---
+func writeAttestationError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(AttestationResponse{Error: message})
+}
+
 // --- Middleware for Authentication ---
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -189,7 +202,38 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// --- Main Inference Handler ---
+// --- API Handlers ---
+
+// --- NEW Attestation Handler ---
+func handleAttestation(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received request for attestation evidence.")
+
+	// Define paths to the C++ host and its dependencies
+	hostAppPath := "./ml_host_prod_go"
+	modelPath := "./model/bert.bin"
+	enclavePath := "./enclave/enclave_prod.signed.so"
+
+	// Execute the host application with the --attest flag
+	cmd := exec.Command(hostAppPath, modelPath, enclavePath, "--attest")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Attestation host process failed: %v\nOutput: %s", err, string(output))
+		writeAttestationError(w, "Failed to generate attestation evidence from host.", http.StatusInternalServerError)
+		return
+	}
+
+	// The C++ host prints the hex-encoded evidence to stdout.
+	evidenceHex := strings.TrimSpace(string(output))
+
+	log.Printf("Successfully generated attestation evidence.")
+
+	// Send the evidence back to the client
+	resp := AttestationResponse{
+		EvidenceHex: evidenceHex,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
 
 func handleInference(w http.ResponseWriter, r *http.Request) {
 	var payload RequestPayload
@@ -280,14 +324,19 @@ func handleInference(w http.ResponseWriter, r *http.Request) {
 // --- Main Function ---
 
 func main() {
-	// Start the persistent C++ worker process
+	// Start the persistent C++ worker process for inference
 	if err := startWorker(); err != nil {
 		log.Fatalf("failed to start worker: %v", err)
 	}
 
 	// Create a new ServeMux to register handlers
 	mux := http.NewServeMux()
-	// The endpoint is now /api/analyze and is protected by the auth middleware
+
+	// --- REGISTER NEW ATTESTATION ENDPOINT ---
+	// This endpoint is public and does not require JWT authentication.
+	mux.HandleFunc("/api/attest", handleAttestation)
+
+	// The inference endpoint remains protected by the auth middleware.
 	mux.HandleFunc("/api/analyze", authMiddleware(handleInference))
 
 	// Configure CORS

@@ -15,6 +15,12 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // --- NEW STATE for Attestation ---
+  const [attestationLoading, setAttestationLoading] = useState(false);
+  const [attestationEvidence, setAttestationEvidence] = useState('');
+  const [attestationError, setAttestationError] = useState('');
+
+
   useEffect(() => {
     // Check for an active session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -75,6 +81,39 @@ export default function Home() {
     }
   };
 
+  // --- NEW FUNCTION to handle Attestation ---
+  const handleAttestation = async () => {
+    setAttestationLoading(true);
+    setAttestationError('');
+    setAttestationEvidence('');
+
+    try {
+        // The attest API URL should be constructed similarly to the analyze URL
+        const attestUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/analyze')
+                            .replace('/api/analyze', '/api/attest');
+
+        const response = await fetch(attestUrl);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to get attestation evidence.');
+        }
+
+        const data = await response.json();
+        setAttestationEvidence(data.evidence_hex);
+
+    } catch (err) {
+        if (err instanceof Error) {
+            setAttestationError(err.message);
+        } else {
+            setAttestationError('An unknown error occurred.');
+        }
+    } finally {
+        setAttestationLoading(false);
+    }
+  };
+
+
   if (!session) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -89,7 +128,7 @@ export default function Home() {
   // Main application UI for logged-in users
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white border border-gray-200 rounded-lg shadow-md">
+      <div className="w-full max-w-lg p-8 space-y-6 bg-white border border-gray-200 rounded-lg shadow-md">
         <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-800">Analyze Sentiment</h1>
             <button 
@@ -100,7 +139,7 @@ export default function Home() {
             </button>
         </div>
         <p className="text-sm text-gray-600">
-            Enter a sentence to be analyzed. Your input is processed securely.
+            Enter a sentence to be analyzed. Your input is processed securely inside an Intel SGX enclave.
         </p>
 
         <form onSubmit={handleAnalyze} className="space-y-4">
@@ -136,6 +175,36 @@ export default function Home() {
              )}
           </div>
         </div>
+        
+        {/* --- NEW ATTESTATION UI --- */}
+        <div className="pt-4 border-t">
+            <h2 className="font-semibold text-gray-700">Verify Enclave Integrity</h2>
+            <p className="text-sm text-gray-600 mt-1">
+                Click the button below to get cryptographic proof (attestation evidence) that the backend is running inside a genuine Intel SGX enclave.
+            </p>
+            <button
+                onClick={handleAttestation}
+                disabled={attestationLoading}
+                className="w-full mt-3 px-4 py-2 font-semibold text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+                {attestationLoading ? 'Generating Evidence...' : 'Get Attestation Evidence'}
+            </button>
+            {attestationEvidence && (
+                <div className="mt-3">
+                    <h3 className="font-medium text-gray-800">Attestation Quote (Hex):</h3>
+                    <div className="p-2 mt-1 text-xs text-gray-600 bg-gray-100 border rounded-md break-all font-mono">
+                        {attestationEvidence}
+                    </div>
+                    <p className="text-xs text-center mt-2 text-gray-500">
+                        In a real application, this quote would be sent to a verification service like Microsoft Azure Attestation.
+                    </p>
+                </div>
+            )}
+            {attestationError && (
+                <p className="mt-3 text-red-500">{attestationError}</p>
+            )}
+        </div>
+
       </div>
     </div>
   );

@@ -1,13 +1,15 @@
 // openenclave_ml_poc/common/enclave.edl
 enclave {
     from "openenclave/edl/sgx/platform.edl" import *;
-    from "openenclave/edl/logging.edl" import *; 
+    from "openenclave/edl/logging.edl" import *;
+    // --- NEW IMPORT for Attestation ---
+    from "openenclave/edl/sgx/attestation.edl" import *;
 
     trusted {
         public oe_result_t initialize_enclave_ml_context(
-            [in, size=model_size] const unsigned char* model_data, 
+            [in, size=model_size] const unsigned char* model_data,
             size_t model_size,
-            [out] uint64_t* enclave_session_handle); 
+            [out] uint64_t* enclave_session_handle);
 
         public oe_result_t enclave_infer(
             uint64_t enclave_session_handle,
@@ -18,6 +20,12 @@ enclave {
             [out] size_t* actual_output_size_bytes_out);
 
         public oe_result_t terminate_enclave_ml_context(uint64_t enclave_session_handle);
+
+        // --- NEW ATTESTATION FUNCTION ---
+        // This function will generate and return the attestation evidence (quote)
+        public bool get_attestation_evidence(
+            [out] unsigned char** evidence_buffer,
+            [out] size_t* evidence_size);
     };
 
     untrusted {
