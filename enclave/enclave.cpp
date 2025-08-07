@@ -137,37 +137,39 @@ bool get_attestation_evidence(unsigned char** evidence_buffer,
         return false;
 
     *evidence_buffer = nullptr;
-    *evidence_size   = 0;
+    *evidence_size = 0;
 
-    /* No custom claims and no endorsements in this simple flow. */
-    const void*  custom_claims_buffer        = nullptr;
-    size_t       custom_claims_buffer_size   = 0;
-    const void*  endorsements_buffer_in      = nullptr;
-    size_t       endorsements_buffer_in_size = 0;
-
-    /* Output pointers.  Endorsements are optional—pass NULL if you don’t need
-       them on the host side. */
-    unsigned char* endorsements_buffer_out   = nullptr;
-    size_t         endorsements_size_out     = 0;
-
-    const oe_uuid_t format_id = OE_FORMAT_UUID_SGX_ECDSA;
-
-    oe_result_t r = oe_get_evidence(
-        &format_id,                     /* SGX-ECDSA quote */
-        0,                              /* flags */
-        custom_claims_buffer,
-        custom_claims_buffer_size,
-        endorsements_buffer_in,
-        endorsements_buffer_in_size,
-        evidence_buffer,                /* <-- out */
-        evidence_size,                  /* <-- out */
-        nullptr,                        /* out_endorsements_buffer = NULL */
-        nullptr);                       /* out_endorsements_size   = NULL */
-
+    // 1) Make sure the attester is initialized (idempotent).
+    oe_result_t r = oe_attester_initialize();  // required on OE 0.19
     if (r != OE_OK)
         return false;
 
-    /* The *evidence_buffer* is returned to the host; host must call
-       oe_free_evidence() when done. */
+    // 2) Ask OE to pick a format we actually support on this box.
+    //    Prefer ECDSA (remote attestation); fall back to local attestation
+    //    (works on simulation as well).
+    const oe_uuid_t* preferred[] = {
+        &OE_FORMAT_UUID_SGX_ECDSA,
+        &OE_FORMAT_UUID_SGX_LOCAL_ATTESTATION
+    };
+    oe_uuid_t selected{};
+    r = oe_attester_select_format(preferred, 2, &selected);
+    if (r != OE_OK)
+        return false;
+
+    // 3) No custom claims, no endorsements for the simple flow.
+    const void* custom = nullptr; size_t custom_len = 0;
+
+    r = oe_get_evidence(
+        &selected,                 /* format chosen by OE */
+        0,                         /* flags */
+        custom, custom_len,        /* no custom claims */
+        nullptr, 0,                /* no input endorsements */
+        evidence_buffer,           /* out: evidence */
+        evidence_size,             /* out: evidence size */
+        nullptr, nullptr);         /* no output endorsements */
+    if (r != OE_OK)
+        return false;
+
+    // Note: do NOT call oe_attester_shutdown() here; keep it initialized for future calls.
     return true;
 }
