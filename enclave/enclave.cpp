@@ -11,7 +11,6 @@
 // --- NEW INCLUDES for Attestation ---
 #include <openenclave/attestation/attester.h>      // oe_get_evidence / oe_attester_initialize
 #include <openenclave/attestation/sgx/evidence.h>  // SGX‑specific UUIDs & claims
-#include <openenclave/attestation/endorsements.h>  // optional, if you export endorsements
 
 #define ENCLAVE_LOG(level, fmt, ...) printf("[" level "] [Enclave] " fmt "\n", ##__VA_ARGS__)
 
@@ -162,15 +161,11 @@ bool get_attestation_evidence(unsigned char** evidence_buffer,
         endorsements_buffer_in_size,
         evidence_buffer,                /* <-- out */
         evidence_size,                  /* <-- out */
-        &endorsements_buffer_out,       /* <-- out (optional) */
-        &endorsements_size_out);        /* <-- out (optional) */
+        nullptr,                        /* out_endorsements_buffer = NULL */
+        nullptr);                       /* out_endorsements_size   = NULL */
 
     if (r != OE_OK)
         return false;
-
-    /* If you don’t need endorsements on the host, free them here. */
-    if (endorsements_buffer_out)
-        oe_free_endorsements(endorsements_buffer_out);
 
     /* The *evidence_buffer* is returned to the host; host must call
        oe_free_evidence() when done. */
