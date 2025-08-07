@@ -138,33 +138,46 @@ bool get_attestation_evidence(unsigned char** evidence_buffer, size_t* evidence_
     *evidence_buffer = nullptr;
     *evidence_size   = 0;
 
-    // 1) Initialize attester (idempotent on OE 0.19)
+    // Initialize attester (idempotent on OE 0.19)
     oe_result_t r = oe_attester_initialize();
     if (r != OE_OK)
         return false;
 
-    // 2) Let OE choose a supported format (prefer ECDSA, else local)
+    // Prefer ECDSA DCAP; fall back to LOCAL (works in simulation)
     const oe_uuid_t preferred[] = {
-        OE_FORMAT_UUID_SGX_ECDSA,             // remote attestation (DCAP)
-        OE_FORMAT_UUID_SGX_LOCAL_ATTESTATION  // local (works in simulation)
+        OE_FORMAT_UUID_SGX_ECDSA,
+        OE_FORMAT_UUID_SGX_LOCAL_ATTESTATION
     };
-    oe_uuid_t selected = {};  // output
-    r = oe_attester_select_format(preferred,
-                                  sizeof(preferred)/sizeof(preferred[0]),
-                                  &selected);
+    oe_uuid_t selected{};
+    r = oe_attester_select_format(preferred, sizeof(preferred)/sizeof(preferred[0]), &selected);
     if (r != OE_OK)
         return false;
 
-    // 3) No custom claims / endorsements in this simple flow
+    // Get evidence into ENCLAVE memory
+    unsigned char* enc_buf = nullptr;
+    size_t enc_sz = 0;
     r = oe_get_evidence(&selected,
                         0,
-                        nullptr, 0,         // custom claims
-                        nullptr, 0,         // endorsements in
-                        evidence_buffer,    // out evidence
-                        evidence_size,      // out size
-                        nullptr, nullptr);  // no endorsements out
+                        nullptr, 0,        // no custom claims
+                        nullptr, 0,        // no endorsements in
+                        &enc_buf, &enc_sz, // OUT: enclave-allocated
+                        nullptr, nullptr); // no endorsements out
     if (r != OE_OK)
         return false;
 
+    // Allocate HOST memory and copy evidence out
+    unsigned char* host_buf = (unsigned char*)oe_host_malloc(enc_sz);
+    if (!host_buf)
+    {
+        oe_free_evidence(enc_buf);  // free enclave memory before returning
+        return false;
+    }
+
+    // It’s OK for enclave to write to host memory
+    memcpy(host_buf, enc_buf, enc_sz);
+    oe_free_evidence(enc_buf);      // free enclave memory
+
+    *evidence_buffer = host_buf;    // host owns this pointer
+    *evidence_size   = enc_sz;
     return true;
 }
