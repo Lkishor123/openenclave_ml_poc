@@ -1,7 +1,10 @@
-build/
-external/
-model/
-onnx_env
+sentiment-analysis-backend/build
+sentiment-analysis-backend/external
+sentiment-analysis-backend/model
+sentiment-analysis-backend/onnx_env
+
+
 sentiment-analysis-frontend/node_modules
+
 .env.backend
 .env
