@@ -11,6 +11,8 @@ services:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    env_file:
+      - ./.env
     ports:
       - "3000:3000"
     networks:
@@ -22,7 +24,7 @@ services:
   # Backend Service (Go + SGX)
   backend:
     build:
-      context: .
+      context: ./sentiment-analysis-backend
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
