@@ -342,10 +342,10 @@ func main() {
 	// Configure CORS
 	c := cors.New(cors.Options{
 		// Add the public IP of the frontend here
-		AllowedOrigins:   []string{"http://localhost:3000", "http://40.71.80.56:3000"},
+		AllowedOrigins:   []string{"*"}, // allow all origins
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		Debug:            true,
 	})
 
