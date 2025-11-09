@@ -341,12 +341,13 @@ func main() {
 
 	// Configure CORS
 	c := cors.New(cors.Options{
-		// Add the public IP of the frontend here
-		AllowedOrigins:   []string{"*"}, // allow all origins
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		Debug:            true,
+
+		// Allow all origins by returning true; library will echo the Origin (works with credentials)
+		AllowOriginFunc: func(origin string) bool { return true },
 	})
 
 	handler := c.Handler(mux)

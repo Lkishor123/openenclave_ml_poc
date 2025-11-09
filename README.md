@@ -76,3 +76,15 @@ Modify `backend/main.go` to pass the `--simulate` flag and then run:
 ```bash
 docker run --rm -p 8080:8080 confidential-ml-app
 ```
+
+
+
+## SupaBase Test:
+```
+curl -i -X POST \
+  'https://xxxxxxxxxx.supabase.co/auth/v1/token?grant_type=password' \
+  -H 'apikey: REPLACE_WITH_ANON_KEY' \
+  -H 'Authorization: Bearer REPLACE_WITH_ANON_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"SuperSecret123"}'
+```
