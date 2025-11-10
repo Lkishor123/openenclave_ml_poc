@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -339,15 +340,18 @@ func main() {
 	// The inference endpoint remains protected by the auth middleware.
 	mux.HandleFunc("/api/analyze", authMiddleware(handleInference))
 
-	// Configure CORS
+	allowedOrigins := []string{"http://localhost:3000"}
+	if envOrigin := strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN")); envOrigin != "" {
+		allowedOrigins = append(allowedOrigins, envOrigin)
+	}
+
 	c := cors.New(cors.Options{
+		// Add the public IP of the frontend here via ALLOWED_ORIGIN env var
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 		Debug:            true,
-
-		// Allow all origins by returning true; library will echo the Origin (works with credentials)
-		AllowOriginFunc: func(origin string) bool { return true },
 	})
 
 	handler := c.Handler(mux)

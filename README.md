@@ -77,8 +77,6 @@ Modify `backend/main.go` to pass the `--simulate` flag and then run:
 docker run --rm -p 8080:8080 confidential-ml-app
 ```
 
-
-
 ## SupaBase Test:
 ```
 curl -i -X POST \
