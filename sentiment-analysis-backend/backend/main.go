@@ -353,6 +353,7 @@ func main() {
 		Debug:            true,
 	})
 
+	log.Printf("CORS %+v", c)
 	handler := c.Handler(mux)
 
 	// Create a server with a timeout
