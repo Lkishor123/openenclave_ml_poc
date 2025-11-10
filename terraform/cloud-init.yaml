@@ -1,0 +1,13 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-plugin
+runcmd:
+  - [ bash, -lc, "usermod -aG docker ${ADMIN_USER:=user123}" ]
+  - [ bash, -lc, "systemctl enable --now docker" ]
+  # Prepare app home
+  - [ bash, -lc, "mkdir -p /opt/app && chown ${ADMIN_USER}:${ADMIN_USER} /opt/app" ]
+  # Optional: reboot once to finalize kernel/driver updates (uncomment if needed)
+  # - [ reboot ]

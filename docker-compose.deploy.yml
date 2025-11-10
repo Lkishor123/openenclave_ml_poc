@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  frontend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_FRONTEND_IMAGE}:${IMAGE_TAG}
+    env_file:
+      - /opt/app/.env
+    ports:
+      - "3000:3000"
+    networks: [sentiment-net]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_BACKEND_IMAGE}:${IMAGE_TAG}
+    env_file:
+      - /opt/app/.env.backend
+    devices:
+      - "/dev/sgx_enclave:/dev/sgx_enclave"
+      - "/dev/sgx_provision:/dev/sgx_provision"
+    ports:
+      - "8080:8080"
+    networks: [sentiment-net]
+    restart: unless-stopped
+
+networks:
+  sentiment-net:
+    driver: bridge

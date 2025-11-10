@@ -1,0 +1,165 @@
+name: ci-cd-azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+env:
+  TF_WORKING_DIR: terraform
+  GHCR_OWNER: ${{ github.repository_owner }}
+  GHCR_FRONTEND_IMAGE: openenclave-frontend
+  GHCR_BACKEND_IMAGE: openenclave-backend
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push FRONTEND
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sentiment-analysis-frontend
+          push: true
+          tags: |
+            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:latest
+
+      - name: Build & push BACKEND
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sentiment-analysis-backend
+          push: true
+          tags: |
+            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:latest
+
+    outputs:
+      image_tag: ${{ github.sha }}
+
+  terraform_apply:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    env:
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC optional)
+        uses: azure/login@v2
+        with:
+          client-id:     ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id:     ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -upgrade
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Capture public IP
+        id: tfout
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: echo "PUBLIC_IP=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+
+    outputs:
+      vm_ip: ${{ steps.tfout.outputs.PUBLIC_IP }}
+      image_tag: ${{ needs.build_and_push.outputs.image_tag }}
+
+  deploy_vm:
+    needs: terraform_apply
+    runs-on: ubuntu-latest
+    env:
+      GHCR_OWNER: ${{ env.GHCR_OWNER }}
+      GHCR_FRONTEND_IMAGE: ${{ env.GHCR_FRONTEND_IMAGE }}
+      GHCR_BACKEND_IMAGE:  ${{ env.GHCR_BACKEND_IMAGE }}
+      IMAGE_TAG:           ${{ needs.terraform_apply.outputs.image_tag }}
+      VM_USER:             ${{ secrets.VM_ADMIN_USERNAME }}
+      VM_HOST:             ${{ needs.terraform_apply.outputs.vm_ip }}
+    steps:
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+
+      - name: Create env files & compose up (remote)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          script_stop: true
+          # if your VM uses default 22, omit port
+          script: |
+            set -e
+            sudo mkdir -p /opt/app
+            sudo chown $USER:$USER /opt/app
+            cat << 'EOF' > /opt/app/.env
+NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+NEXT_PUBLIC_API_URL=http://${{ env.VM_HOST }}:8080/api/analyze
+SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
+EOF
+
+            cat << 'EOF' > /opt/app/.env.backend
+SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
+ALLOWED_ORIGIN="http://${{ env.VM_HOST }}:3000"
+EOF
+
+            # Login to GHCR for pulling (token is already available in this action as github token is not automatically present on remote)
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Write deploy compose
+            cat << 'COMPOSE' > /opt/app/docker-compose.deploy.yml
+version: "3.8"
+services:
+  frontend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_FRONTEND_IMAGE}:${IMAGE_TAG}
+    env_file:
+      - /opt/app/.env
+    ports: [ "3000:3000" ]
+    networks: [ sentiment-net ]
+    depends_on: [ backend ]
+    restart: unless-stopped
+  backend:
+    image: ghcr.io/${GHCR_OWNER}/${GHCR_BACKEND_IMAGE}:${IMAGE_TAG}
+    env_file:
+      - /opt/app/.env.backend
+    devices:
+      - "/dev/sgx_enclave:/dev/sgx_enclave"
+      - "/dev/sgx_provision:/dev/sgx_provision"
+    ports: [ "8080:8080" ]
+    networks: [ sentiment-net ]
+    restart: unless-stopped
+networks:
+  sentiment-net:
+    driver: bridge
+COMPOSE
+
+            docker compose -f /opt/app/docker-compose.deploy.yml pull
+            docker compose -f /opt/app/docker-compose.deploy.yml up -d
