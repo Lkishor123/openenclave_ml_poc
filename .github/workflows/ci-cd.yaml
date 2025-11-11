@@ -38,6 +38,10 @@ jobs:
         with:
           context: ./sentiment-analysis-frontend
           push: true
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ github.sha }}
             ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:latest
