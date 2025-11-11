@@ -123,50 +123,56 @@ jobs:
           script_stop: true
           script: |
             set -e
+
             sudo mkdir -p /opt/app
             sudo chown $USER:$USER /opt/app
 
-            cat << 'EOF' > /opt/app/.env
-NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-NEXT_PUBLIC_API_URL=http://${{ env.VM_HOST }}:8080/api/analyze
-SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
-EOF
+            # .env
+            printf '%s\n' \
+            'NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}' \
+            'NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}' \
+            'NEXT_PUBLIC_API_URL=http://${{ env.VM_HOST }}:8080/api/analyze' \
+            'SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}' \
+            | tee /opt/app/.env >/dev/null
 
-            cat << 'EOF' > /opt/app/.env.backend
-SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
-ALLOWED_ORIGIN="http://${{ env.VM_HOST }}:3000"
-EOF
+            # .env.backend
+            printf '%s\n' \
+            'SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}' \
+            'ALLOWED_ORIGIN="http://${{ env.VM_HOST }}:3000"' \
+            | tee /opt/app/.env.backend >/dev/null
 
-            # GHCR login with PAT owner username
+            # Login to GHCR (use PAT owner username)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Write compose with resolved image refs (no env expansion needed on VM)
-            cat << COMPOSE > /opt/app/docker-compose.deploy.yml
-version: "3.8"
-services:
-  frontend:
-    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-    env_file:
-      - /opt/app/.env
-    ports: [ "3000:3000" ]
-    networks: [ sentiment-net ]
-    depends_on: [ backend ]
-    restart: unless-stopped
-  backend:
-    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-    env_file:
-      - /opt/app/.env.backend
-    devices:
-      - "/dev/sgx_enclave:/dev/sgx_enclave"
-      - "/dev/sgx_provision:/dev/sgx_provision"
-    ports: [ "8080:8080" ]
-    networks: [ sentiment-net ]
-    restart: unless-stopped
-networks:
-  sentiment-net:
-    driver: bridge
-COMPOSE
+            # Be sure Docker is up (first boot can race)
+            until sudo systemctl is-active --quiet docker; do echo "waiting for docker..."; sleep 3; done
+
+            # Write docker-compose.deploy.yml without heredoc
+            printf '%s\n' \
+            'version: "3.8"' \
+            'services:' \
+            '  frontend:' \
+            '    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}' \
+            '    env_file:' \
+            '      - /opt/app/.env' \
+            '    ports: [ "3000:3000" ]' \
+            '    networks: [ sentiment-net ]' \
+            '    depends_on: [ backend ]' \
+            '    restart: unless-stopped' \
+            '  backend:' \
+            '    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}' \
+            '    env_file:' \
+            '      - /opt/app/.env.backend' \
+            '    devices:' \
+            '      - "/dev/sgx_enclave:/dev/sgx_enclave"' \
+            '      - "/dev/sgx_provision:/dev/sgx_provision"' \
+            '    ports: [ "8080:8080" ]' \
+            '    networks: [ sentiment-net ]' \
+            '    restart: unless-stopped' \
+            'networks:' \
+            '  sentiment-net:' \
+            '    driver: bridge' \
+            | tee /opt/app/docker-compose.deploy.yml >/dev/null
 
             docker compose -f /opt/app/docker-compose.deploy.yml pull
             docker compose -f /opt/app/docker-compose.deploy.yml up -d
