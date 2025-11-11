@@ -157,11 +157,3 @@ resource "azurerm_linux_virtual_machine" "vm" {
   custom_data = filebase64("${path.module}/cloud-init.yaml")
   tags        = local.tags
 }
-
-output "public_ip" {
-  value = azurerm_public_ip.pip.ip_address
-}
-
-output "ssh_example" {
-  value = "ssh ${var.admin_username}@${azurerm_public_ip.pip.ip_address}"
-}
