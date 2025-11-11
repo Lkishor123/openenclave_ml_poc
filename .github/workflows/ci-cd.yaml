@@ -22,12 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Lowercase repo owner for GHCR
+        id: owner
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build & push FRONTEND
         uses: docker/build-push-action@v6
@@ -35,8 +39,8 @@ jobs:
           context: ./sentiment-analysis-frontend
           push: true
           tags: |
-            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ github.sha }}
-            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:latest
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:latest
 
       - name: Build & push BACKEND
         uses: docker/build-push-action@v6
@@ -44,11 +48,12 @@ jobs:
           context: ./sentiment-analysis-backend
           push: true
           tags: |
-            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ github.sha }}
-            ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:latest
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_BACKEND_IMAGE }}:latest
 
     outputs:
       image_tag: ${{ github.sha }}
+      owner_lc: ${{ steps.owner.outputs.owner_lc }}
 
   terraform_apply:
     needs: build_and_push
@@ -58,15 +63,17 @@ jobs:
       ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
       ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
       ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login (OIDC optional)
-        uses: azure/login@v2
-        with:
-          client-id:     ${{ secrets.ARM_CLIENT_ID }}
-          tenant-id:     ${{ secrets.ARM_TENANT_ID }}
-          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      # - name: Azure login (OIDC optional)
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id:     ${{ secrets.ARM_CLIENT_ID }}
+      #     tenant-id:     ${{ secrets.ARM_TENANT_ID }}
+      #     subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -96,7 +103,7 @@ jobs:
     needs: terraform_apply
     runs-on: ubuntu-latest
     env:
-      GHCR_OWNER: ${{ env.GHCR_OWNER }}
+      GHCR_OWNER:          ${{ needs.build_and_push.outputs.owner_lc }}
       GHCR_FRONTEND_IMAGE: ${{ env.GHCR_FRONTEND_IMAGE }}
       GHCR_BACKEND_IMAGE:  ${{ env.GHCR_BACKEND_IMAGE }}
       IMAGE_TAG:           ${{ needs.terraform_apply.outputs.image_tag }}
@@ -114,11 +121,11 @@ jobs:
           host: ${{ env.VM_HOST }}
           username: ${{ env.VM_USER }}
           script_stop: true
-          # if your VM uses default 22, omit port
           script: |
             set -e
             sudo mkdir -p /opt/app
             sudo chown $USER:$USER /opt/app
+
             cat << 'EOF' > /opt/app/.env
 NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -131,15 +138,15 @@ SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
 ALLOWED_ORIGIN="http://${{ env.VM_HOST }}:3000"
 EOF
 
-            # Login to GHCR for pulling (token is already available in this action as github token is not automatically present on remote)
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # GHCR login with PAT owner username
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Write deploy compose
-            cat << 'COMPOSE' > /opt/app/docker-compose.deploy.yml
+            # Write compose with resolved image refs (no env expansion needed on VM)
+            cat << COMPOSE > /opt/app/docker-compose.deploy.yml
 version: "3.8"
 services:
   frontend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_FRONTEND_IMAGE}:${IMAGE_TAG}
+    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
     env_file:
       - /opt/app/.env
     ports: [ "3000:3000" ]
@@ -147,7 +154,7 @@ services:
     depends_on: [ backend ]
     restart: unless-stopped
   backend:
-    image: ghcr.io/${GHCR_OWNER}/${GHCR_BACKEND_IMAGE}:${IMAGE_TAG}
+    image: ghcr.io/${{ env.GHCR_OWNER }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
     env_file:
       - /opt/app/.env.backend
     devices:

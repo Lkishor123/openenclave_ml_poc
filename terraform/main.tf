@@ -1,4 +1,10 @@
 terraform {
+  backend "azurerm" {
+    resource_group_name  = "ccopenenclave"
+    storage_account_name = "tfstate1762896009"
+    container_name       = "tfstate"
+    key                  = "openenclave-ml-poc.tfstate"
+  }
   required_version = ">= 1.6.0"
   required_providers {
     azurerm = {
