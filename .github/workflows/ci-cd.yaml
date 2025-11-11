@@ -45,6 +45,11 @@ jobs:
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:${{ github.sha }}
             ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_FRONTEND_IMAGE }}:latest
+      - name: Backend assets | download model/tokenizer
+        run: |
+          set -e
+          cd sentiment-analysis-backend
+          bash download_deps.sh
 
       - name: Build & push BACKEND
         uses: docker/build-push-action@v6
