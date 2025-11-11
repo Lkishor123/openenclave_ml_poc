@@ -104,8 +104,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GHCR_OWNER:          ${{ needs.build_and_push.outputs.owner_lc }}
-      GHCR_FRONTEND_IMAGE: ${{ env.GHCR_FRONTEND_IMAGE }}
-      GHCR_BACKEND_IMAGE:  ${{ env.GHCR_BACKEND_IMAGE }}
+      GHCR_FRONTEND_IMAGE: openenclave-frontend
+      GHCR_BACKEND_IMAGE:  openenclave-backend
       IMAGE_TAG:           ${{ needs.terraform_apply.outputs.image_tag }}
       VM_USER:             ${{ secrets.VM_ADMIN_USERNAME }}
       VM_HOST:             ${{ needs.terraform_apply.outputs.vm_ip }}
