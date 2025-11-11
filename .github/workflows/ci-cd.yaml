@@ -73,6 +73,7 @@ jobs:
       ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
       ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
       TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+      ARM_SKIP_PROVIDER_REGISTRATION: true
 
     steps:
       - uses: actions/checkout@v4
