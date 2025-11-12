@@ -1,7 +1,7 @@
 terraform {
   backend "azurerm" {
     resource_group_name  = "ccopenenclave"
-    storage_account_name = "tfstate1762896009"
+    storage_account_name = "tfstate193417469"
     container_name       = "tfstate"
     key                  = "openenclave-ml-poc.tfstate"
   }
