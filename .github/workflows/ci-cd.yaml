@@ -115,7 +115,7 @@ jobs:
       image_tag: ${{ needs.build_and_push.outputs.image_tag }}
 
   deploy_vm:
-    needs: terraform_apply
+    needs: [terraform_apply, build_and_push]
     runs-on: ubuntu-latest
     env:
       GHCR_OWNER:          ${{ needs.build_and_push.outputs.owner_lc }}
@@ -169,6 +169,22 @@ jobs:
           debug: true
           script: |
             set -euo pipefail
+
+             # Ensure Docker CE + compose plugin are installed (self-heal)
+             if ! docker compose version >/dev/null 2>&1; then
+               echo "Installing Docker CE + compose plugin..."
+               set -x
+               sudo apt-get update -y
+               sudo apt-get remove -y docker.io docker-doc docker-compose podman-docker containerd runc || true
+               sudo apt-get install -y ca-certificates curl gnupg
+               sudo install -m 0755 -d /etc/apt/keyrings
+               curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+               echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+               sudo apt-get update -y
+               sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+               sudo systemctl enable --now docker
+               set +x
+             fi
 
             sudo mkdir -p /opt/app
             sudo chown $USER:$USER /opt/app
