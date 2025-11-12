@@ -90,7 +90,12 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -upgrade
+        run: |
+          terraform init -upgrade \
+            -backend-config="resource_group_name=ccopenenclave" \
+            -backend-config="storage_account_name=tfstate123321nov12" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=openenclave-ml-poc.tfstate"
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}

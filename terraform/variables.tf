@@ -10,12 +10,12 @@ variable "location" {
 
 variable "resource_group_name" {
   type    = string
-  default = "ccopenenclave2"
+  default = "ccopenenclave"
 }
 
 variable "vm_name" {
   type    = string
-  default = "accvm2"
+  default = "accvm"
 }
 
 variable "vm_size" {
