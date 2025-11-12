@@ -125,19 +125,50 @@ jobs:
       VM_USER:             ${{ secrets.VM_ADMIN_USERNAME }}
       VM_HOST:             ${{ needs.terraform_apply.outputs.vm_ip }}
     steps:
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+      - name: Wait for SSH (port 22)
+        run: |
+          echo "Probing ${{ env.VM_HOST }}:22 ..."
+          for i in {1..30}; do
+            if timeout 2 bash -lc "echo > /dev/tcp/${{ env.VM_HOST }}/22" 2>/dev/null; then
+              echo "SSH is up."
+              exit 0
+            fi
+            echo "Waiting for SSH... ($i/30)"
+            sleep 3
+          done
+          echo "SSH did not come up in time." >&2
+          exit 1
 
+      - name: SSH smoke test
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          timeout: 60s
+          command_timeout: 2m
+          debug: true
+          script: |
+            set -e
+            whoami
+            uname -a
+
+      # 2) Deploy
       - name: Create env files & compose up (remote)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.VM_HOST }}
           username: ${{ env.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}   # <— IMPORTANT
+          port: 22
           script_stop: true
+          timeout: 60s
+          command_timeout: 30m
+          debug: true
           script: |
-            set -e
+            set -euo pipefail
 
             sudo mkdir -p /opt/app
             sudo chown $USER:$USER /opt/app
