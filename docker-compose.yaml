@@ -5,7 +5,7 @@ services:
   # Frontend Service (Next.js)
   frontend:
     build:
-      context: ./sentiment-analysis-frontend
+      context: ./submodule/frontend
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
@@ -24,7 +24,7 @@ services:
   # Backend Service (Go + SGX)
   backend:
     build:
-      context: ./sentiment-analysis-backend
+      context: ./submodule/backend
       dockerfile: Dockerfile
     ports:
       - "8080:8080"

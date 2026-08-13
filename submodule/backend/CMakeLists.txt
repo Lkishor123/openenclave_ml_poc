@@ -63,7 +63,7 @@ endif()
 set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
 set(BERTCPP_SOURCE_DIR ${EXTERNAL_DIR}/bert.cpp)
 if(NOT EXISTS "${BERTCPP_SOURCE_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run scripts/download_deps.sh?")
+    message(FATAL_ERROR "bert.cpp source not found at ${BERTCPP_SOURCE_DIR}. Did you run download_deps.sh?")
 endif()
 
 # Let bert.cpp build its own ggml dependency
@@ -139,7 +139,7 @@ add_subdirectory(host)
 
 # --- Copy Model to Build Directory ---
 # The GGML model is not checked in. Developers should run
-# `scripts/download_deps.sh` before building or using the run targets.
+# `download_deps.sh` before building or using the run targets.
 set(MODEL_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/model/bert.bin)
 set(MODEL_BUILD_DIR ${CMAKE_BINARY_DIR}/model)
 set(MODEL_DEST_PATH ${MODEL_BUILD_DIR}/bert.bin)
@@ -152,7 +152,7 @@ if(EXISTS ${MODEL_SOURCE_PATH})
         COMMENT "Copying GGML model to build directory: ${MODEL_DEST_PATH}"
         VERBATIM)
 else()
-    message(WARNING "Model file not found at ${MODEL_SOURCE_PATH}. Run scripts/download_deps.sh to fetch it.")
+    message(WARNING "Model file not found at ${MODEL_SOURCE_PATH}. Run download_deps.sh to fetch it.")
 endif()
 
 message(STATUS "Root ML PoC CMake configuration complete. Build type: ${CMAKE_BUILD_TYPE}")

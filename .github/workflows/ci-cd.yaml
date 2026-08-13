@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  TF_WORKING_DIR: terraform
+  TF_WORKING_DIR: artifact/terraform
   GHCR_OWNER: ${{ github.repository_owner }}
   GHCR_FRONTEND_IMAGE: openenclave-frontend
   GHCR_BACKEND_IMAGE: openenclave-backend
@@ -36,7 +36,7 @@ jobs:
       - name: Build & push FRONTEND
         uses: docker/build-push-action@v6
         with:
-          context: ./sentiment-analysis-frontend
+          context: ./submodule/frontend
           push: true
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -48,13 +48,13 @@ jobs:
       - name: Backend assets | download model/tokenizer
         run: |
           set -e
-          cd sentiment-analysis-backend
+          cd submodule/backend
           bash download_deps.sh
 
       - name: Build & push BACKEND
         uses: docker/build-push-action@v6
         with:
-          context: ./sentiment-analysis-backend
+          context: ./submodule/backend
           push: true
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner_lc }}/${{ env.GHCR_BACKEND_IMAGE }}:${{ github.sha }}

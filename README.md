@@ -1,11 +1,27 @@
 # Openenclave_ML_POC
 
+## Repository Layout
+
+```text
+.
+├── artifact/                  # Infra & deploy files
+│   ├── terraform/             # Azure VM provisioning (incl. cloud-init.yaml)
+│   ├── k8s/                   # AKS deployment manifest
+│   └── docker-compose.deploy.yml
+├── submodule/
+│   ├── frontend/              # Next.js UI
+│   └── backend/               # Go API + Open Enclave C++ host/enclave
+├── docker-compose.yaml        # Local dev compose (builds both services)
+└── README.md
+```
+
 ## Download Dependencies
 
-Run `scripts/download_deps.sh` to fetch a prebuilt GGML model and tokenizer. **Run this script before invoking CMake** so the build can locate `model/bert.bin`:
+Run `submodule/backend/download_deps.sh` to fetch a prebuilt GGML model and tokenizer. **Run this script before invoking CMake** so the build can locate `model/bert.bin`:
 
 ```bash
-scripts/download_deps.sh
+cd submodule/backend
+bash download_deps.sh
 ```
 
 After the script finishes you will have `model/bert.bin` and a
@@ -45,10 +61,10 @@ oeedger8r --untrusted common/enclave.edl --untrusted-dir build/edl_generated \
 Configure and compile:
 
 ```bash
-cd openenclave_ml_poc
+cd submodule/backend
 mkdir build
 cd build
-# Ensure scripts/download_deps.sh has been run so model/bert.bin exists
+# Ensure submodule/backend/download_deps.sh has been run so model/bert.bin exists
 cmake .. -DGGML_ROOT_DIR=/opt/ggml -DCMAKE_BUILD_TYPE=Debug
 make
 make run
@@ -65,6 +81,7 @@ From the `build` directory you can directly invoke the host binary:
 ## Docker Build
 
 ```bash
+cd submodule/backend
 docker build -t confidential-ml-app .
 docker run --rm -p 8080:8080 --device /dev/sgx_enclave confidential-ml-app
 ```
