@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"io"
 	"log"
 	"math"
@@ -15,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/cors"
 )
 
@@ -72,7 +70,11 @@ func startWorker() error {
 	modelPath := "./model/bert.bin"
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
-	workerCmd = exec.Command(hostAppPath, modelPath, enclavePath, "--use-stdin")
+	args := []string{modelPath, enclavePath, "--use-stdin"}
+	if os.Getenv("OE_SIMULATION") == "1" {
+		args = append(args, "--simulate")
+	}
+	workerCmd = exec.Command(hostAppPath, args...)
 	var err error
 	workerStdin, err = workerCmd.StdinPipe()
 	if err != nil {
@@ -151,57 +153,6 @@ func writeAttestationError(w http.ResponseWriter, message string, statusCode int
 	json.NewEncoder(w).Encode(AttestationResponse{Error: message})
 }
 
-// --- Middleware for Authentication ---
-
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Get the JWT secret from environment variables
-		jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
-		if jwtSecret == "" {
-			log.Println("Error: SUPABASE_JWT_SECRET environment variable not set.")
-			writeJSONError(w, "Server configuration error", http.StatusInternalServerError)
-			return
-		}
-
-		// Get the token from the Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			writeJSONError(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
-
-		// The header should be in the format "Bearer <token>"
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader { // No "Bearer " prefix found
-			writeJSONError(w, "Invalid Authorization header format", http.StatusUnauthorized)
-			return
-		}
-
-		// Parse and validate the token
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// Check the signing method
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return []byte(jwtSecret), nil
-		})
-
-		if err != nil {
-			log.Printf("JWT validation error: %v", err)
-			writeJSONError(w, "Invalid or expired token", http.StatusUnauthorized)
-			return
-		}
-
-		if !token.Valid {
-			writeJSONError(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		// If the token is valid, call the next handler
-		next.ServeHTTP(w, r)
-	}
-}
-
 // --- API Handlers ---
 
 // --- NEW Attestation Handler ---
@@ -214,7 +165,11 @@ func handleAttestation(w http.ResponseWriter, r *http.Request) {
 	enclavePath := "./enclave/enclave_prod.signed.so"
 
 	// Execute the host application with the --attest flag
-	cmd := exec.Command(hostAppPath, modelPath, enclavePath, "--attest")
+	args := []string{modelPath, enclavePath, "--attest"}
+	if os.Getenv("OE_SIMULATION") == "1" {
+		args = append(args, "--simulate")
+	}
+	cmd := exec.Command(hostAppPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("Attestation host process failed: %v\nOutput: %s", err, string(output))
@@ -332,12 +287,8 @@ func main() {
 	// Create a new ServeMux to register handlers
 	mux := http.NewServeMux()
 
-	// --- REGISTER NEW ATTESTATION ENDPOINT ---
-	// This endpoint is public and does not require JWT authentication.
 	mux.HandleFunc("/api/attest", handleAttestation)
-
-	// The inference endpoint remains protected by the auth middleware.
-	mux.HandleFunc("/api/analyze", authMiddleware(handleInference))
+	mux.HandleFunc("/api/analyze", handleInference)
 
 	allowedOrigins := []string{"http://localhost:3000"}
 	if envOrigin := strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN")); envOrigin != "" {
@@ -348,7 +299,7 @@ func main() {
 		// Add the public IP of the frontend here via ALLOWED_ORIGIN env var
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 		Debug:            true,
 	})

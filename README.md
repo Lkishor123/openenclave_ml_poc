@@ -4,16 +4,29 @@
 
 ```text
 .
-├── artifact/                  # Infra & deploy files
-│   ├── terraform/             # Azure VM provisioning (incl. cloud-init.yaml)
-│   ├── k8s/                   # AKS deployment manifest
-│   └── docker-compose.deploy.yml
+├── artifact/
+│   └── k8s/                   # Example SGX deployment manifest (AKS)
 ├── submodule/
 │   ├── frontend/              # Next.js UI
 │   └── backend/               # Go API + Open Enclave C++ host/enclave
-├── docker-compose.yaml        # Local dev compose (builds both services)
+├── docker-compose.yaml        # Local compose (builds and runs both services)
 └── README.md
 ```
+
+## Quick Start (Intel SGX machine)
+
+```bash
+submodule/backend/download_deps.sh   # fetch model + tokenizer + bert.cpp (run from submodule/backend)
+docker compose up --build
+```
+
+Open <http://localhost:3000> and analyze a sentence. The API is available
+directly at `POST http://localhost:8080/api/analyze` with body
+`{"input": "some text"}`. No env files or external services are required.
+
+On an x86 machine **without** SGX, run the enclave in simulation mode:
+remove the `devices` section from `docker-compose.yaml` and set
+`OE_SIMULATION=1` on the backend service.
 
 ## Download Dependencies
 
@@ -88,18 +101,8 @@ docker run --rm -p 8080:8080 --device /dev/sgx_enclave confidential-ml-app
 
 ### For Simulation Mode
 
-Modify `backend/main.go` to pass the `--simulate` flag and then run:
+Set `OE_SIMULATION=1` (the backend passes `--simulate` to the enclave host):
 
 ```bash
-docker run --rm -p 8080:8080 confidential-ml-app
-```
-
-## SupaBase Test:
-```
-curl -i -X POST \
-  'https://xxxxxxxxxx.supabase.co/auth/v1/token?grant_type=password' \
-  -H 'apikey: REPLACE_WITH_ANON_KEY' \
-  -H 'Authorization: Bearer REPLACE_WITH_ANON_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"user@example.com","password":"SuperSecret123"}'
+docker run --rm -p 8080:8080 -e OE_SIMULATION=1 confidential-ml-app
 ```

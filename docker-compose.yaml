@@ -1,5 +1,8 @@
 # docker-compose.yml
-version: '3.8'
+# Runs the full stack on an Intel SGX machine. No env files or external
+# services are required.
+# On an x86 machine WITHOUT SGX, run the enclave in simulation mode instead:
+# remove the "devices" section below and set OE_SIMULATION=1 on the backend.
 
 services:
   # Frontend Service (Next.js)
@@ -8,11 +11,7 @@ services:
       context: ./submodule/frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-    env_file:
-      - ./.env
+        - NEXT_PUBLIC_API_URL=http://localhost:8080/api/analyze
     ports:
       - "3000:3000"
     networks:
@@ -21,18 +20,19 @@ services:
       - backend
     restart: unless-stopped
 
-  # Backend Service (Go + SGX)
+  # Backend Service (Go + Open Enclave, SGX)
   backend:
     build:
       context: ./submodule/backend
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    env_file:
-      - ./.env.backend
+    platform: linux/amd64
+    environment:
+      - ALLOWED_ORIGIN=http://localhost:3000
     devices:
       - "/dev/sgx_enclave:/dev/sgx_enclave"
       - "/dev/sgx_provision:/dev/sgx_provision"
+    ports:
+      - "8080:8080"
     networks:
       - sentiment-net
     restart: unless-stopped
@@ -41,4 +41,3 @@ services:
 networks:
   sentiment-net:
     driver: bridge
-

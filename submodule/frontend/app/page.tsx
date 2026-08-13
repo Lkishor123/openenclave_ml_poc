@@ -1,62 +1,31 @@
 // /app/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import type { Session } from '@supabase/supabase-js';
+import { useState } from 'react';
 
 export default function Home() {
-  const supabase = createClient();
-  const [session, setSession] = useState<Session | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [result, setResult] = useState<{ input_text: string; sentiment: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // --- NEW STATE for Attestation ---
   const [attestationLoading, setAttestationLoading] = useState(false);
   const [attestationEvidence, setAttestationEvidence] = useState('');
   const [attestationError, setAttestationError] = useState('');
 
-
-  useEffect(() => {
-    // Check for an active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    // Listen for changes in auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/analyze';
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) {
-      setError('You must be logged in to analyze sentiment.');
-      return;
-    }
-    
     setIsLoading(true);
     setError('');
     setResult(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) {
-          throw new Error("API URL is not configured.");
-      }
-
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`, // Send the JWT
         },
         body: JSON.stringify({ "input": inputValue }),
       });
@@ -69,8 +38,6 @@ export default function Home() {
       const data = await response.json();
       setResult(data);
     } catch (err) {
-      // Safely handle the error by checking its type before accessing properties.
-      // This resolves the 'no-explicit-any' ESLint error.
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -81,16 +48,13 @@ export default function Home() {
     }
   };
 
-  // --- NEW FUNCTION to handle Attestation ---
   const handleAttestation = async () => {
     setAttestationLoading(true);
     setAttestationError('');
     setAttestationEvidence('');
 
     try {
-        // The attest API URL should be constructed similarly to the analyze URL
-        const attestUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/analyze')
-                            .replace('/api/analyze', '/api/attest');
+        const attestUrl = apiUrl.replace('/api/analyze', '/api/attest');
 
         const response = await fetch(attestUrl);
 
@@ -113,31 +77,10 @@ export default function Home() {
     }
   };
 
-
-  if (!session) {
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-50">
-            <div className="w-full max-w-md p-8 space-y-6 bg-white border border-gray-200 rounded-lg shadow-md">
-                 <h1 className="text-2xl font-bold text-center text-gray-800">Confidential Sentiment Analysis</h1>
-                <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['github', 'google']} />
-            </div>
-        </div>
-    )
-  }
-
-  // Main application UI for logged-in users
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-lg p-8 space-y-6 bg-white border border-gray-200 rounded-lg shadow-md">
-        <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-800">Analyze Sentiment</h1>
-            <button 
-                onClick={() => supabase.auth.signOut()}
-                className="px-3 py-1 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
-            >
-                Sign Out
-            </button>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800">Analyze Sentiment</h1>
         <p className="text-sm text-gray-600">
             Enter a sentence to be analyzed. Your input is processed securely inside an Intel SGX enclave.
         </p>
@@ -175,8 +118,8 @@ export default function Home() {
              )}
           </div>
         </div>
-        
-        {/* --- NEW ATTESTATION UI --- */}
+
+        {/* --- ATTESTATION UI --- */}
         <div className="pt-4 border-t">
             <h2 className="font-semibold text-gray-700">Verify Enclave Integrity</h2>
             <p className="text-sm text-gray-600 mt-1">
