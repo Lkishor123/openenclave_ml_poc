@@ -5,3 +5,4 @@ When adding new code or documentation:
 - Run `submodule/backend/download_deps.sh` before building to ensure external libraries are available.
 - The host application links against `bert.cpp` and `ggml`; avoid adding dependencies on extra dependencies.
 - Docker builds expect the model at `model/bert.bin` and tokenizer files under `tokenizer/`.
+- Do not add AI/Claude co-author signatures to commit messages.
